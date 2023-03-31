@@ -7,7 +7,8 @@ defmodule SurrealEx.Types.DriverOpts do
           {:database, String.t()},
           {:ssl, boolean()},
           {:ssl_opts, list()},
-          {:singleton?, boolean()}
+          {:singleton?, boolean()},
+          {:channel, :http | :socket}
         ]
 
   defstruct [:hostname, :port, :username, :password, :database, :ssl, :ssl_opts, :singleton?]
@@ -22,6 +23,7 @@ defmodule SurrealEx.Types.DriverOpts do
       database: "default",
       ssl: false,
       ssl_opts: [],
-      singleton?: true
+      singleton?: true,
+      channel: :http
     ]
 end

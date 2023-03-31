@@ -14,12 +14,15 @@ defmodule SurrealEx.MixProject do
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger, :inets, :ssl]
     ]
   end
 
   defp deps do
     [
+      {:jason, "~> 1.4"},
+      {:websockex, "~> 0.4.3"},
+      {:mock, "~> 0.3.0", only: :test},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
