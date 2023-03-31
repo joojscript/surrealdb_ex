@@ -5,7 +5,7 @@ defmodule SurrealEx.MixProject do
     [
       app: :surreal_ex,
       version: "0.1.0",
-      elixir: "~> 1.15-dev",
+      elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       preferred_cli_env: preferred_cli_env()
