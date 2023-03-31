@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Allows you to run this workflow manually from the Actions tab on GitHub.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ImageOS: "ubuntu20"
+  MIX_ENV: "test"
+  OTP_VERSION_SPEC: "25.2"
+  ELIXIR_VERSION_SPEC: "1.14.3"
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION_SPEC }}
+          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
+          version-type: "strict"
+      - name: Install dependencies
+        run: mix deps.get
+      - name: Run tests
+        run: mix test
