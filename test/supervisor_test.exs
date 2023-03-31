@@ -55,7 +55,7 @@ defmodule SurrealEx.SupervisorTest do
              Elixir.Supervisor.which_children(pid) |> Enum.at(0)
 
     # Starts monitoring the child
-    result = Process.monitor(child_pid)
+    Process.monitor(child_pid)
 
     Process.exit(child_pid, :kill)
 
