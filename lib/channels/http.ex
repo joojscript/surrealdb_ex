@@ -1,5 +1,6 @@
 defmodule SurrealEx.Channels.Http do
   use Agent
+  # use SurrealEx.Operations
 
   @type http_opts :: [
           hostname: String.t(),
@@ -27,10 +28,10 @@ defmodule SurrealEx.Channels.Http do
 
     opts = Keyword.merge(default_opts(), opts)
 
-    Agent.start_link(fn -> opts end, name: __MODULE__)
+    Agent.start_link(fn -> opts end)
   end
 
-  @spec stop(pid()) :: :ok | {:error, term()}
+  @spec stop(pid()) :: :ok
   def stop(pid) do
     Agent.stop(pid)
   end
@@ -42,15 +43,14 @@ defmodule SurrealEx.Channels.Http do
 
     ## Examples
 
-        iex> SurrealEx.Channels.Http.query("SELECT 1")
+        iex> SurrealEx.Channels.Http.make_request("SELECT 1")
         {:ok, %{data: %{rows: [[1]]}, error: nil, status: 200}}
   """
-  @spec query(String.t(), keyword(any())) :: {:ok, term(), term()} | {:error, term()}
-  def query(query, params \\ []) do
-    opts = Agent.get(__MODULE__, fn state -> state end) |> Keyword.merge(params)
+  @spec make_request(pid(), String.t(), keyword(any())) :: {:ok, term()} | {:error, term()}
+  def make_request(pid, query, params \\ []) do
+    opts = Agent.get(pid, fn state -> state end) |> Keyword.merge(params)
     hostname = Keyword.get(opts, :hostname, "127.0.0.1")
     port = Keyword.get(opts, :port, 8000)
-    timeout = Keyword.get(opts, :timeout, 5000)
     namespace = Keyword.get(opts, :namespace, "default")
     database = Keyword.get(opts, :database, "default")
     username = Keyword.get(opts, :username, "root")
@@ -75,9 +75,7 @@ defmodule SurrealEx.Channels.Http do
             ~c"application/json",
             ~c"#{query}"
           },
-          [
-            {~c"timeout", ~c"#{timeout}"}
-          ],
+          [],
           []
         )
 
@@ -91,5 +89,10 @@ defmodule SurrealEx.Channels.Http do
   defp before_connect() do
     :inets.start()
     :ssl.start()
+  end
+
+  @spec ping(pid()) :: {:ok, term()} | {:error, term()}
+  def ping(pid) do
+    make_request(pid, "SELECT 1")
   end
 end

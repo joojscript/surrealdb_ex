@@ -36,10 +36,10 @@ defmodule SurrealEx.Supervisor do
     )
   end
 
-  @opaque supervisor_on_init_return_type ::
-            {:ok,
-             {Supervisor.sup_flags(),
-              [Supervisor.child_spec() | (old_erlang_child_spec :: :supervisor.child_spec())]}}
+  @typep supervisor_on_init_return_type ::
+           {:ok,
+            {Supervisor.sup_flags(),
+             [Supervisor.child_spec() | (old_erlang_child_spec :: :supervisor.child_spec())]}}
 
   @impl true
   @spec init(keyword()) :: supervisor_on_init_return_type()

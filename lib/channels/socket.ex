@@ -2,6 +2,7 @@ defmodule SurrealEx.Channels.Socket do
   require Logger
 
   use WebSockex
+  use SurrealEx.Operations
 
   @type socket_opts :: [
           hostname: String.t(),
@@ -33,17 +34,14 @@ defmodule SurrealEx.Channels.Socket do
     WebSockex.start_link("ws://#{hostname}:#{port}/rpc", __MODULE__, opts)
   end
 
-  @spec stop(pid()) :: :ok | {:error, term()}
+  @spec stop(pid()) :: :ok
   def stop(pid) do
-    cond do
-      Process.exit(pid, :kill) -> :ok
-      true -> {:error, "Could not stop process"}
-    end
+    Process.exit(pid, :kill)
+    :ok
   end
 
   def handle_frame({type, msg}, state) do
-    Logger.info("Received Message - Type: #{inspect(type)} -- Message: #{inspect(msg)}")
-    IO.inspect(Jason.decode!(msg))
+    # Logger.info("Received Message - Type: #{inspect(type)} -- Message: #{inspect(msg)}")
     {:ok, state}
   end
 
@@ -56,10 +54,20 @@ defmodule SurrealEx.Channels.Socket do
       case method do
         "query" -> [args[:query], args[:payload]]
         "signin" -> [args[:payload]]
+        "signup" -> [args[:payload]]
         "use" -> [args[:namespace], args[:database]]
+        "authenticate" -> [args[:token]]
+        "change" -> [args[:table], args[:payload]]
+        "create" -> [args[:table], args[:payload]]
+        "delete" -> [args[:table]]
+        "kill" -> [args[:query]]
+        "let" -> [args[:key], args[:value]]
+        "live" -> [args[:table]]
+        "modify" -> [args[:table], args[:payload]]
+        "select" -> [args[:query]]
+        "update" -> [args[:table], args[:payload]]
+        _ -> []
       end
-
-    IO.inspect(args)
 
     %{
       "id" => :rand.uniform(9999) |> to_string(),
@@ -69,32 +77,91 @@ defmodule SurrealEx.Channels.Socket do
     |> Jason.encode!()
   end
 
-  # REFERENCE: https://github.com/surrealdb/surrealdb.js/blob/ce949aeddd2b451b3b7b473705e62fbbc58e095b/src/index.ts#L72
-  @type sign_in_payload :: %{
-          NS: String.t(),
-          DB: String.t(),
-          user: String.t(),
-          pass: String.t()
-        }
-  @doc """
-    Sends a `signin` frame to Surreal DB WebSocket endpoint.
-  """
-  @spec sign_in(pid(), sign_in_payload()) :: :ok | {:error, term()}
+  ## Operations Implementation:
+
+  @spec sign_in(pid(), keyword()) :: :ok | {:error, term()}
   def sign_in(pid, payload) do
     WebSockex.cast(pid, {"signin", [payload: payload]})
   end
 
-  @doc """
-    Sends a `query` frame to Surreal DB WebSocket endpoint.
-  """
-  @spec query(pid, String.t(), map()) :: :ok
+  @spec query(pid, String.t(), map()) :: :ok | {:error, term()}
   def query(pid, query, payload) do
     WebSockex.cast(pid, {"query", [query: query, payload: payload]})
   end
 
-  @spec use(pid(), String.t(), String.t()) :: :ok
+  @spec use(pid(), String.t(), String.t()) :: :ok | {:error, term()}
   def use(pid, namespace, database) do
     WebSockex.cast(pid, {"use", [namespace: namespace, database: database]})
+  end
+
+  @spec authenticate(pid(), String.t()) :: :ok | {:error, term()}
+  def authenticate(pid, token) do
+    WebSockex.cast(pid, {"authenticate", [token]})
+  end
+
+  @spec change(pid(), String.t(), map()) :: :ok | {:error, term()}
+  def change(pid, table, payload) do
+    WebSockex.cast(pid, {"change", [table: table, payload: payload]})
+  end
+
+  @spec create(pid(), String.t(), map()) :: :ok | {:error, term()}
+  def create(pid, table, payload) do
+    WebSockex.cast(pid, {"create", [table: table, payload: payload]})
+  end
+
+  @spec delete(pid(), String.t()) :: :ok | {:error, term()}
+  def delete(pid, table) do
+    WebSockex.cast(pid, {"delete", [table: table]})
+  end
+
+  @spec info(pid()) :: :ok | {:error, term()}
+  def info(pid) do
+    WebSockex.cast(pid, {"info", []})
+  end
+
+  @spec invalidate(pid()) :: :ok | {:error, term()}
+  def invalidate(pid) do
+    WebSockex.cast(pid, {"invalidate", []})
+  end
+
+  @spec kill(pid(), String.t()) :: :ok | {:error, term()}
+  def kill(pid, query) do
+    WebSockex.cast(pid, {"kill", [query: query]})
+  end
+
+  @spec let(pid(), String.t(), String.t()) :: :ok | {:error, term()}
+  def let(pid, key, value) do
+    WebSockex.cast(pid, {"let", [key: key, value: value]})
+  end
+
+  @spec live(pid(), String.t()) :: :ok | {:error, term()}
+  def live(pid, table) do
+    WebSockex.cast(pid, {"live", [table: table]})
+  end
+
+  @spec modify(pid(), String.t(), map() | list(map())) :: :ok | {:error, term()}
+  def modify(pid, table, payload) do
+    WebSockex.cast(pid, {"modify", [table: table, payload: payload]})
+  end
+
+  @spec ping(pid()) :: :ok | {:error, term()}
+  def ping(pid) do
+    WebSockex.cast(pid, {"ping", []})
+  end
+
+  @spec select(pid(), String.t()) :: :ok | {:error, term()}
+  def select(pid, query) do
+    WebSockex.cast(pid, {"select", [query: query]})
+  end
+
+  @spec sign_up(pid(), Operations.sign_up_payload()) :: :ok | {:error, term()}
+  def sign_up(pid, payload) do
+    WebSockex.cast(pid, {"signup", [payload: payload]})
+  end
+
+  @spec update(pid(), String.t(), map()) :: :ok | {:error, term()}
+  def update(pid, table, payload) do
+    WebSockex.cast(pid, {"update", [table: table, payload: payload]})
   end
 
   def handle_cast(caller, state) do
@@ -103,7 +170,7 @@ defmodule SurrealEx.Channels.Socket do
     payload = build_cast_payload(method, args)
 
     frame = {:text, payload}
-    Logger.info("Sending #{method} frame with payload: #{payload}")
+    # Logger.info("Sending #{method} frame with payload: #{payload}")
     {:reply, frame, state}
   end
 end
