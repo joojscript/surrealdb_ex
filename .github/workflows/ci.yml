@@ -42,7 +42,7 @@ jobs:
       - name: Installs Surreal DB on VM
         run: curl -sSf https://install.surrealdb.com | sh
       - name: Starts In-Memory Surreal DB
-        run: surreal start --log trace --user root --pass root memory
+        run: surreal start --log trace --user root --pass root memory &
       - uses: actions/checkout@v3
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
