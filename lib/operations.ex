@@ -10,7 +10,7 @@ defmodule SurrealEx.Operations do
     end
   end
 
-  @type common_response :: {:ok, map()} | {:error, any()}
+  @type common_response :: {:ok, map()} | {:error, any()} | term()
 
   @callback ping(pid()) :: common_response()
 

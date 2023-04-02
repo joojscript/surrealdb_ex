@@ -1,4 +1,5 @@
 defmodule SurrealEx.Socket do
+  alias SurrealEx.Operations
   use WebSockex
   use SurrealEx.Operations
 
@@ -11,20 +12,23 @@ defmodule SurrealEx.Socket do
           password: String.t()
         ]
 
-  @spec default_opts :: socket_opts()
-  def default_opts,
-    do: [
-      hostname: "localhost",
-      port: 8000,
-      namespace: "default",
-      database: "default",
-      username: "root",
-      password: "root"
-    ]
+  @type base_connection_opts :: socket_opts()
+  @base_connection_opts Application.compile_env(:surreal_ex, :connection_config,
+                          hostname: "localhost",
+                          port: 8000,
+                          namespace: "default",
+                          database: "default",
+                          username: "root",
+                          password: "root"
+                        )
 
   @spec start_link(socket_opts()) :: WebSockex.on_start()
   def start_link(opts \\ []) do
-    opts = Keyword.merge(default_opts(), opts)
+    opts =
+      Keyword.merge(
+        @base_connection_opts,
+        opts
+      )
 
     hostname = Keyword.get(opts, :hostname)
     port = Keyword.get(opts, :port)
@@ -109,7 +113,7 @@ defmodule SurrealEx.Socket do
 
   ## Operations Implementation:
 
-  @spec sign_in(pid(), keyword()) :: Operations.common_response()
+  @spec sign_in(pid(), keyword()) :: {ok, term()} | {:error, term()}
   def sign_in(pid, payload) when is_pid(pid),
     do: declare_and_run(pid, {"signin", [payload: payload]})
 
@@ -118,7 +122,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"signin", [payload: payload, __receiver__: task]}, opts)
 
-  @spec query(pid, String.t(), map()) :: Operations.common_response()
+  @spec query(pid, String.t(), map()) :: {ok, term()} | {:error, term()}
   def query(pid, query, payload),
     do: declare_and_run(pid, {"query", [query: query, payload: payload]})
 
@@ -132,7 +136,7 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec use(pid(), String.t(), String.t()) :: Operations.common_response()
+  @spec use(pid(), String.t(), String.t()) :: {ok, term()} | {:error, term()}
   def use(pid, namespace, database),
     do: declare_and_run(pid, {"use", [namespace: namespace, database: database]})
 
@@ -146,7 +150,7 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec authenticate(pid(), String.t()) :: Operations.common_response()
+  @spec authenticate(pid(), String.t()) :: {ok, term()} | {:error, term()}
   def authenticate(pid, token), do: declare_and_run(pid, {"authenticate", [token: token]})
 
   @spec authenticate(pid(), String.t(), Task.t(), task_opts()) :: term()
@@ -154,7 +158,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"authenticate", [token: token, __receiver__: task]}, opts)
 
-  @spec change(pid(), String.t(), map()) :: Operations.common_response()
+  @spec change(pid(), String.t(), map()) :: {ok, term()} | {:error, term()}
   def change(pid, table, payload),
     do: declare_and_run(pid, {"change", [table: table, payload: payload]})
 
@@ -168,7 +172,7 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec create(pid(), String.t(), map()) :: Operations.common_response()
+  @spec create(pid(), String.t(), map()) :: {ok, term()} | {:error, term()}
   def create(pid, table, payload),
     do: declare_and_run(pid, {"create", [table: table, payload: payload]})
 
@@ -182,7 +186,7 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec delete(pid(), String.t()) :: Operations.common_response()
+  @spec delete(pid(), String.t()) :: {ok, term()} | {:error, term()}
   def delete(pid, table), do: declare_and_run(pid, {"delete", [table: table]})
 
   @spec delete(pid(), String.t(), Task.t(), task_opts()) :: term()
@@ -190,7 +194,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"delete", [table: table, __receiver__: task]}, opts)
 
-  @spec info(pid()) :: Operations.common_response()
+  @spec info(pid()) :: {ok, term()} | {:error, term()}
   def info(pid), do: declare_and_run(pid, {"info", []})
 
   @spec info(pid(), Task.t(), task_opts()) :: term()
@@ -198,7 +202,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"info", [__receiver__: task]}, opts)
 
-  @spec invalidate(pid()) :: Operations.common_response()
+  @spec invalidate(pid()) :: {ok, term()} | {:error, term()}
   def invalidate(pid), do: declare_and_run(pid, {"invalidate", []})
 
   @spec invalidate(pid(), Task.t(), task_opts()) :: term()
@@ -206,7 +210,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"invalidate", [__receiver__: task]}, opts)
 
-  @spec kill(pid(), String.t()) :: Operations.common_response()
+  @spec kill(pid(), String.t()) :: {ok, term()} | {:error, term()}
   def kill(pid, query), do: declare_and_run(pid, {"kill", [query: query]})
 
   @spec kill(pid(), String.t(), Task.t(), task_opts()) :: term()
@@ -214,7 +218,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"kill", [query: query, __receiver__: task]}, opts)
 
-  @spec let(pid(), String.t(), String.t()) :: Operations.common_response()
+  @spec let(pid(), String.t(), String.t()) :: {ok, term()} | {:error, term()}
   def let(pid, key, value), do: declare_and_run(pid, {"let", [key: key, value: value]})
 
   @spec let(pid(), String.t(), String.t(), Task.t(), task_opts()) :: term()
@@ -222,7 +226,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"let", [key: key, value: value, __receiver__: task]}, opts)
 
-  @spec live(pid(), String.t()) :: Operations.common_response()
+  @spec live(pid(), String.t()) :: {ok, term()} | {:error, term()}
   def live(pid, table), do: declare_and_run(pid, {"live", [table: table]})
 
   @spec live(pid(), String.t(), Task.t(), task_opts()) :: term()
@@ -230,7 +234,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"live", [table: table, __receiver__: task]}, opts)
 
-  @spec modify(pid(), String.t(), map() | list(map())) :: Operations.common_response()
+  @spec modify(pid(), String.t(), map() | list(map())) :: {ok, term()} | {:error, term()}
   def modify(pid, table, payload),
     do: declare_and_run(pid, {"modify", [table: table, payload: payload]})
 
@@ -244,7 +248,7 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec ping(pid()) :: Operations.common_response()
+  @spec ping(pid()) :: {ok, term()} | {:error, term()}
   def ping(pid), do: declare_and_run(pid, {"ping", []})
 
   @spec ping(pid(), Task.t(), task_opts()) :: term()
@@ -252,7 +256,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"ping", [__receiver__: task]}, opts)
 
-  @spec select(pid(), String.t()) :: Operations.common_response()
+  @spec select(pid(), String.t()) :: {ok, term()} | {:error, term()}
   def select(pid, query), do: declare_and_run(pid, {"select", [query: query]})
 
   @spec select(pid(), String.t(), Task.t(), task_opts()) :: term()
@@ -260,7 +264,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"select", [query: query, __receiver__: task]}, opts)
 
-  @spec sign_up(pid(), Operations.sign_up_payload()) :: Operations.common_response()
+  @spec sign_up(pid(), Operations.sign_up_payload()) :: {ok, term()} | {:error, term()}
   def sign_up(pid, payload), do: declare_and_run(pid, {"signup", [payload: payload]})
 
   @spec sign_up(pid(), Operations.sign_up_payload(), Task.t(), task_opts()) :: term()
@@ -268,7 +272,7 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"signup", [payload: payload, __receiver__: task]}, opts)
 
-  @spec update(pid(), String.t(), map()) :: Operations.common_response()
+  @spec update(pid(), String.t(), map()) :: {ok, term()} | {:error, term()}
   def update(pid, table, payload),
     do: declare_and_run(pid, {"update", [table: table, payload: payload]})
 
