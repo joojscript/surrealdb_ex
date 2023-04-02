@@ -1,4 +1,4 @@
-defmodule SurrealEx.Channels.Socket do
+defmodule SurrealEx.Socket do
   use WebSockex
   use SurrealEx.Operations
 

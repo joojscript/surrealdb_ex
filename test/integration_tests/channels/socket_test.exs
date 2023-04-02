@@ -1,7 +1,7 @@
-defmodule SurrealEx.Channels.SocketTest do
+defmodule SurrealEx.SocketTest do
   use ExUnit.Case, async: true
 
-  alias SurrealEx.Channels.Socket
+  alias SurrealEx.Socket
 
   @test_database_config Application.compile_env(:surreal_ex, :test_database_config,
                           hostname: "localhost",
