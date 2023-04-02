@@ -3,7 +3,7 @@ defmodule SurrealEx.Channels.SocketTest do
 
   alias SurrealEx.Channels.Socket
 
-  @test_database_config Application.get_env(:surreal_ex, :test_database_config,
+  @test_database_config Application.compile_env(:surreal_ex, :test_database_config,
                           hostname: "localhost",
                           port: 8000,
                           username: "root",
