@@ -24,3 +24,6 @@ surreal_ex-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# Local configuration files (optional, mostly overwrite test data):
+config/config.exs

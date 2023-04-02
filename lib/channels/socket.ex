@@ -1,6 +1,4 @@
 defmodule SurrealEx.Channels.Socket do
-  require Logger
-
   use WebSockex
   use SurrealEx.Operations
 
@@ -40,8 +38,15 @@ defmodule SurrealEx.Channels.Socket do
     :ok
   end
 
-  def handle_frame({type, msg}, state) do
-    # Logger.info("Received Message - Type: #{inspect(type)} -- Message: #{inspect(msg)}")
+  def handle_frame({_type, msg}, state) do
+    task = Keyword.get(state, :__receiver__)
+
+    Process.send(
+      task.pid,
+      {:ok, msg |> Jason.decode!()},
+      []
+    )
+
     {:ok, state}
   end
 
@@ -77,100 +82,212 @@ defmodule SurrealEx.Channels.Socket do
     |> Jason.encode!()
   end
 
+  @type task_opts :: [
+          timeout: integer() | :infinity
+        ]
+  defp task_opts_default, do: [timeout: :infinity]
+
+  @spec declare_and_run(pid(), {String.t(), keyword()}, task_opts()) ::
+          Operations.common_response()
+  defp declare_and_run(pid, {method, args}, opts \\ []) do
+    task =
+      Task.async(fn ->
+        receive do
+          {:ok, msg} -> {:ok, msg}
+          {:error, reason} -> {:error, reason}
+          _ -> {:error, "Unknown Error"}
+        end
+      end)
+
+    Process.monitor(task.pid)
+
+    WebSockex.cast(pid, {method, Keyword.merge([__receiver__: task], args)})
+
+    task_timeout = Keyword.get(opts, :timeout, :infinity)
+    Task.await(task, task_timeout)
+  end
+
   ## Operations Implementation:
 
-  @spec sign_in(pid(), keyword()) :: :ok | {:error, term()}
-  def sign_in(pid, payload) do
-    WebSockex.cast(pid, {"signin", [payload: payload]})
-  end
+  @spec sign_in(pid(), keyword()) :: Operations.common_response()
+  def sign_in(pid, payload) when is_pid(pid),
+    do: declare_and_run(pid, {"signin", [payload: payload]})
 
-  @spec query(pid, String.t(), map()) :: :ok | {:error, term()}
-  def query(pid, query, payload) do
-    WebSockex.cast(pid, {"query", [query: query, payload: payload]})
-  end
+  @spec sign_in(pid(), keyword(), Task.t(), task_opts()) :: term()
+  def sign_in(pid, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"signin", [payload: payload, __receiver__: task]}, opts)
 
-  @spec use(pid(), String.t(), String.t()) :: :ok | {:error, term()}
-  def use(pid, namespace, database) do
-    WebSockex.cast(pid, {"use", [namespace: namespace, database: database]})
-  end
+  @spec query(pid, String.t(), map()) :: Operations.common_response()
+  def query(pid, query, payload),
+    do: declare_and_run(pid, {"query", [query: query, payload: payload]})
 
-  @spec authenticate(pid(), String.t()) :: :ok | {:error, term()}
-  def authenticate(pid, token) do
-    WebSockex.cast(pid, {"authenticate", [token]})
-  end
+  @spec query(pid, String.t(), map(), Task.t(), task_opts()) :: term()
+  def query(pid, query, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do:
+        declare_and_run(
+          pid,
+          {"query", [query: query, payload: payload, __receiver__: task]},
+          opts
+        )
 
-  @spec change(pid(), String.t(), map()) :: :ok | {:error, term()}
-  def change(pid, table, payload) do
-    WebSockex.cast(pid, {"change", [table: table, payload: payload]})
-  end
+  @spec use(pid(), String.t(), String.t()) :: Operations.common_response()
+  def use(pid, namespace, database),
+    do: declare_and_run(pid, {"use", [namespace: namespace, database: database]})
 
-  @spec create(pid(), String.t(), map()) :: :ok | {:error, term()}
-  def create(pid, table, payload) do
-    WebSockex.cast(pid, {"create", [table: table, payload: payload]})
-  end
+  @spec use(pid(), String.t(), String.t(), Task.t(), task_opts()) :: term()
+  def use(pid, namespace, database, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do:
+        declare_and_run(
+          pid,
+          {"use", [namespace: namespace, database: database, __receiver__: task]},
+          opts
+        )
 
-  @spec delete(pid(), String.t()) :: :ok | {:error, term()}
-  def delete(pid, table) do
-    WebSockex.cast(pid, {"delete", [table: table]})
-  end
+  @spec authenticate(pid(), String.t()) :: Operations.common_response()
+  def authenticate(pid, token), do: declare_and_run(pid, {"authenticate", [token: token]})
 
-  @spec info(pid()) :: :ok | {:error, term()}
-  def info(pid) do
-    WebSockex.cast(pid, {"info", []})
-  end
+  @spec authenticate(pid(), String.t(), Task.t(), task_opts()) :: term()
+  def authenticate(pid, token, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"authenticate", [token: token, __receiver__: task]}, opts)
 
-  @spec invalidate(pid()) :: :ok | {:error, term()}
-  def invalidate(pid) do
-    WebSockex.cast(pid, {"invalidate", []})
-  end
+  @spec change(pid(), String.t(), map()) :: Operations.common_response()
+  def change(pid, table, payload),
+    do: declare_and_run(pid, {"change", [table: table, payload: payload]})
 
-  @spec kill(pid(), String.t()) :: :ok | {:error, term()}
-  def kill(pid, query) do
-    WebSockex.cast(pid, {"kill", [query: query]})
-  end
+  @spec change(pid(), String.t(), map(), Task.t(), task_opts()) :: term()
+  def change(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do:
+        declare_and_run(
+          pid,
+          {"change", [table: table, payload: payload, __receiver__: task]},
+          opts
+        )
 
-  @spec let(pid(), String.t(), String.t()) :: :ok | {:error, term()}
-  def let(pid, key, value) do
-    WebSockex.cast(pid, {"let", [key: key, value: value]})
-  end
+  @spec create(pid(), String.t(), map()) :: Operations.common_response()
+  def create(pid, table, payload),
+    do: declare_and_run(pid, {"create", [table: table, payload: payload]})
 
-  @spec live(pid(), String.t()) :: :ok | {:error, term()}
-  def live(pid, table) do
-    WebSockex.cast(pid, {"live", [table: table]})
-  end
+  @spec create(pid(), String.t(), map(), Task.t(), task_opts()) :: term()
+  def create(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do:
+        declare_and_run(
+          pid,
+          {"create", [table: table, payload: payload, __receiver__: task]},
+          opts
+        )
 
-  @spec modify(pid(), String.t(), map() | list(map())) :: :ok | {:error, term()}
-  def modify(pid, table, payload) do
-    WebSockex.cast(pid, {"modify", [table: table, payload: payload]})
-  end
+  @spec delete(pid(), String.t()) :: Operations.common_response()
+  def delete(pid, table), do: declare_and_run(pid, {"delete", [table: table]})
 
-  @spec ping(pid()) :: :ok | {:error, term()}
-  def ping(pid) do
-    WebSockex.cast(pid, {"ping", []})
-  end
+  @spec delete(pid(), String.t(), Task.t(), task_opts()) :: term()
+  def delete(pid, table, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"delete", [table: table, __receiver__: task]}, opts)
 
-  @spec select(pid(), String.t()) :: :ok | {:error, term()}
-  def select(pid, query) do
-    WebSockex.cast(pid, {"select", [query: query]})
-  end
+  @spec info(pid()) :: Operations.common_response()
+  def info(pid), do: declare_and_run(pid, {"info", []})
 
-  @spec sign_up(pid(), Operations.sign_up_payload()) :: :ok | {:error, term()}
-  def sign_up(pid, payload) do
-    WebSockex.cast(pid, {"signup", [payload: payload]})
-  end
+  @spec info(pid(), Task.t(), task_opts()) :: term()
+  def info(pid, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"info", [__receiver__: task]}, opts)
 
-  @spec update(pid(), String.t(), map()) :: :ok | {:error, term()}
-  def update(pid, table, payload) do
-    WebSockex.cast(pid, {"update", [table: table, payload: payload]})
-  end
+  @spec invalidate(pid()) :: Operations.common_response()
+  def invalidate(pid), do: declare_and_run(pid, {"invalidate", []})
 
-  def handle_cast(caller, state) do
+  @spec invalidate(pid(), Task.t(), task_opts()) :: term()
+  def invalidate(pid, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"invalidate", [__receiver__: task]}, opts)
+
+  @spec kill(pid(), String.t()) :: Operations.common_response()
+  def kill(pid, query), do: declare_and_run(pid, {"kill", [query: query]})
+
+  @spec kill(pid(), String.t(), Task.t(), task_opts()) :: term()
+  def kill(pid, query, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"kill", [query: query, __receiver__: task]}, opts)
+
+  @spec let(pid(), String.t(), String.t()) :: Operations.common_response()
+  def let(pid, key, value), do: declare_and_run(pid, {"let", [key: key, value: value]})
+
+  @spec let(pid(), String.t(), String.t(), Task.t(), task_opts()) :: term()
+  def let(pid, key, value, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"let", [key: key, value: value, __receiver__: task]}, opts)
+
+  @spec live(pid(), String.t()) :: Operations.common_response()
+  def live(pid, table), do: declare_and_run(pid, {"live", [table: table]})
+
+  @spec live(pid(), String.t(), Task.t(), task_opts()) :: term()
+  def live(pid, table, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"live", [table: table, __receiver__: task]}, opts)
+
+  @spec modify(pid(), String.t(), map() | list(map())) :: Operations.common_response()
+  def modify(pid, table, payload),
+    do: declare_and_run(pid, {"modify", [table: table, payload: payload]})
+
+  @spec modify(pid(), String.t(), map() | list(map()), Task.t(), task_opts()) :: term()
+  def modify(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do:
+        declare_and_run(
+          pid,
+          {"modify", [table: table, payload: payload, __receiver__: task]},
+          opts
+        )
+
+  @spec ping(pid()) :: Operations.common_response()
+  def ping(pid), do: declare_and_run(pid, {"ping", []})
+
+  @spec ping(pid(), Task.t(), task_opts()) :: term()
+  def ping(pid, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"ping", [__receiver__: task]}, opts)
+
+  @spec select(pid(), String.t()) :: Operations.common_response()
+  def select(pid, query), do: declare_and_run(pid, {"select", [query: query]})
+
+  @spec select(pid(), String.t(), Task.t(), task_opts()) :: term()
+  def select(pid, query, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"select", [query: query, __receiver__: task]}, opts)
+
+  @spec sign_up(pid(), Operations.sign_up_payload()) :: Operations.common_response()
+  def sign_up(pid, payload), do: declare_and_run(pid, {"signup", [payload: payload]})
+
+  @spec sign_up(pid(), Operations.sign_up_payload(), Task.t(), task_opts()) :: term()
+  def sign_up(pid, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do: declare_and_run(pid, {"signup", [payload: payload, __receiver__: task]}, opts)
+
+  @spec update(pid(), String.t(), map()) :: Operations.common_response()
+  def update(pid, table, payload),
+    do: declare_and_run(pid, {"update", [table: table, payload: payload]})
+
+  @spec update(pid(), String.t(), map(), Task.t(), task_opts()) :: term()
+  def update(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and is_struct(task),
+      do:
+        declare_and_run(
+          pid,
+          {"update", [table: table, payload: payload, __receiver__: task]},
+          opts
+        )
+
+  def handle_cast(caller, _state) do
     {method, args} = caller
 
     payload = build_cast_payload(method, args)
 
     frame = {:text, payload}
-    # Logger.info("Sending #{method} frame with payload: #{payload}")
-    {:reply, frame, state}
+    {:reply, frame, args}
   end
 end
