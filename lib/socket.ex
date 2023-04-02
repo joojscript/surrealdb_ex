@@ -113,22 +113,24 @@ defmodule SurrealEx.Socket do
 
   ## Operations Implementation:
 
-  @spec sign_in(pid(), keyword()) :: {ok, term()} | {:error, term()}
-  def sign_in(pid, payload) when is_pid(pid),
+  def sign_in(pid, payload) when is_pid(pid) and is_map(payload),
     do: declare_and_run(pid, {"signin", [payload: payload]})
 
-  @spec sign_in(pid(), keyword(), Task.t(), task_opts()) :: term()
-  def sign_in(pid, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
-      do: declare_and_run(pid, {"signin", [payload: payload, __receiver__: task]}, opts)
+  def sign_in(pid, payload, %Task{} = task, opts)
+      when is_pid(pid) and is_struct(task) and is_map(payload),
+      do:
+        declare_and_run(
+          pid,
+          {"signin", [payload: payload, __receiver__: task]},
+          opts |> Keyword.merge(task_opts_default())
+        )
 
-  @spec query(pid, String.t(), map()) :: {ok, term()} | {:error, term()}
-  def query(pid, query, payload),
-    do: declare_and_run(pid, {"query", [query: query, payload: payload]})
+  def query(pid, query, payload)
+      when (is_pid(pid) and is_binary(query) and is_map(payload)) or is_struct(payload),
+      do: declare_and_run(pid, {"query", [query: query, payload: payload]})
 
-  @spec query(pid, String.t(), map(), Task.t(), task_opts()) :: term()
   def query(pid, query, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(query) and is_map(payload) and is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -136,13 +138,12 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec use(pid(), String.t(), String.t()) :: {ok, term()} | {:error, term()}
-  def use(pid, namespace, database),
-    do: declare_and_run(pid, {"use", [namespace: namespace, database: database]})
+  def use(pid, namespace, database)
+      when is_pid(pid) and is_binary(namespace) and is_binary(database),
+      do: declare_and_run(pid, {"use", [namespace: namespace, database: database]})
 
-  @spec use(pid(), String.t(), String.t(), Task.t(), task_opts()) :: term()
   def use(pid, namespace, database, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(namespace) and is_binary(database) and is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -150,21 +151,20 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec authenticate(pid(), String.t()) :: {ok, term()} | {:error, term()}
-  def authenticate(pid, token), do: declare_and_run(pid, {"authenticate", [token: token]})
+  def authenticate(pid, token) when is_pid(pid) and is_binary(token),
+    do: declare_and_run(pid, {"authenticate", [token: token]})
 
-  @spec authenticate(pid(), String.t(), Task.t(), task_opts()) :: term()
   def authenticate(pid, token, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(token) and is_struct(task),
       do: declare_and_run(pid, {"authenticate", [token: token, __receiver__: task]}, opts)
 
-  @spec change(pid(), String.t(), map()) :: {ok, term()} | {:error, term()}
-  def change(pid, table, payload),
-    do: declare_and_run(pid, {"change", [table: table, payload: payload]})
+  def change(pid, table, payload)
+      when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
+      do: declare_and_run(pid, {"change", [table: table, payload: payload]})
 
-  @spec change(pid(), String.t(), map(), Task.t(), task_opts()) :: term()
   def change(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when (is_pid(pid) and is_binary(table) and is_map(payload)) or
+             (is_struct(payload) and is_struct(task)),
       do:
         declare_and_run(
           pid,
@@ -172,13 +172,13 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec create(pid(), String.t(), map()) :: {ok, term()} | {:error, term()}
-  def create(pid, table, payload),
-    do: declare_and_run(pid, {"create", [table: table, payload: payload]})
+  def create(pid, table, payload)
+      when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
+      do: declare_and_run(pid, {"create", [table: table, payload: payload]})
 
-  @spec create(pid(), String.t(), map(), Task.t(), task_opts()) :: term()
   def create(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when (is_pid(pid) and is_binary(table) and is_map(payload)) or
+             (is_struct(payload) and is_struct(task)),
       do:
         declare_and_run(
           pid,
@@ -186,61 +186,52 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec delete(pid(), String.t()) :: {ok, term()} | {:error, term()}
-  def delete(pid, table), do: declare_and_run(pid, {"delete", [table: table]})
+  def delete(pid, table) when is_pid(pid) and is_binary(table),
+    do: declare_and_run(pid, {"delete", [table: table]})
 
-  @spec delete(pid(), String.t(), Task.t(), task_opts()) :: term()
   def delete(pid, table, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(table) and is_struct(task),
       do: declare_and_run(pid, {"delete", [table: table, __receiver__: task]}, opts)
 
-  @spec info(pid()) :: {ok, term()} | {:error, term()}
-  def info(pid), do: declare_and_run(pid, {"info", []})
+  def info(pid) when is_pid(pid), do: declare_and_run(pid, {"info", []})
 
-  @spec info(pid(), Task.t(), task_opts()) :: term()
   def info(pid, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"info", [__receiver__: task]}, opts)
 
-  @spec invalidate(pid()) :: {ok, term()} | {:error, term()}
-  def invalidate(pid), do: declare_and_run(pid, {"invalidate", []})
+  def invalidate(pid) when is_pid(pid), do: declare_and_run(pid, {"invalidate", []})
 
-  @spec invalidate(pid(), Task.t(), task_opts()) :: term()
   def invalidate(pid, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"invalidate", [__receiver__: task]}, opts)
 
-  @spec kill(pid(), String.t()) :: {ok, term()} | {:error, term()}
-  def kill(pid, query), do: declare_and_run(pid, {"kill", [query: query]})
+  def kill(pid, query) when is_pid(pid) and is_binary(query),
+    do: declare_and_run(pid, {"kill", [query: query]})
 
-  @spec kill(pid(), String.t(), Task.t(), task_opts()) :: term()
   def kill(pid, query, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(query) and is_struct(task),
       do: declare_and_run(pid, {"kill", [query: query, __receiver__: task]}, opts)
 
-  @spec let(pid(), String.t(), String.t()) :: {ok, term()} | {:error, term()}
-  def let(pid, key, value), do: declare_and_run(pid, {"let", [key: key, value: value]})
+  def let(pid, key, value) when is_pid(pid) and is_binary(key) and is_binary(value),
+    do: declare_and_run(pid, {"let", [key: key, value: value]})
 
-  @spec let(pid(), String.t(), String.t(), Task.t(), task_opts()) :: term()
   def let(pid, key, value, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(key) and is_binary(value) and is_struct(task),
       do: declare_and_run(pid, {"let", [key: key, value: value, __receiver__: task]}, opts)
 
-  @spec live(pid(), String.t()) :: {ok, term()} | {:error, term()}
-  def live(pid, table), do: declare_and_run(pid, {"live", [table: table]})
+  def live(pid, table) when is_pid(pid) and is_binary(table),
+    do: declare_and_run(pid, {"live", [table: table]})
 
-  @spec live(pid(), String.t(), Task.t(), task_opts()) :: term()
   def live(pid, table, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(table) and is_struct(task),
       do: declare_and_run(pid, {"live", [table: table, __receiver__: task]}, opts)
 
-  @spec modify(pid(), String.t(), map() | list(map())) :: {ok, term()} | {:error, term()}
-  def modify(pid, table, payload),
-    do: declare_and_run(pid, {"modify", [table: table, payload: payload]})
+  def modify(pid, table, payload)
+      when is_pid(pid) and is_binary(table) and is_list(payload),
+      do: declare_and_run(pid, {"modify", [table: table, payload: payload]})
 
-  @spec modify(pid(), String.t(), map() | list(map()), Task.t(), task_opts()) :: term()
   def modify(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(table) and is_list(payload) and is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -248,37 +239,33 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  @spec ping(pid()) :: {ok, term()} | {:error, term()}
-  def ping(pid), do: declare_and_run(pid, {"ping", []})
+  def ping(pid) when is_pid(pid), do: declare_and_run(pid, {"ping", []})
 
-  @spec ping(pid(), Task.t(), task_opts()) :: term()
   def ping(pid, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"ping", [__receiver__: task]}, opts)
 
-  @spec select(pid(), String.t()) :: {ok, term()} | {:error, term()}
-  def select(pid, query), do: declare_and_run(pid, {"select", [query: query]})
+  def select(pid, query) when is_pid(pid) and is_binary(query),
+    do: declare_and_run(pid, {"select", [query: query]})
 
-  @spec select(pid(), String.t(), Task.t(), task_opts()) :: term()
   def select(pid, query, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when is_pid(pid) and is_binary(query) and is_struct(task),
       do: declare_and_run(pid, {"select", [query: query, __receiver__: task]}, opts)
 
-  @spec sign_up(pid(), Operations.sign_up_payload()) :: {ok, term()} | {:error, term()}
-  def sign_up(pid, payload), do: declare_and_run(pid, {"signup", [payload: payload]})
+  def sign_up(pid, payload) when (is_pid(pid) and is_map(payload)) or is_struct(payload),
+    do: declare_and_run(pid, {"signup", [payload: payload]})
 
-  @spec sign_up(pid(), Operations.sign_up_payload(), Task.t(), task_opts()) :: term()
   def sign_up(pid, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when (is_pid(pid) and is_map(payload)) or (is_struct(payload) and is_struct(task)),
       do: declare_and_run(pid, {"signup", [payload: payload, __receiver__: task]}, opts)
 
-  @spec update(pid(), String.t(), map()) :: {ok, term()} | {:error, term()}
-  def update(pid, table, payload),
-    do: declare_and_run(pid, {"update", [table: table, payload: payload]})
+  def update(pid, table, payload)
+      when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
+      do: declare_and_run(pid, {"update", [table: table, payload: payload]})
 
-  @spec update(pid(), String.t(), map(), Task.t(), task_opts()) :: term()
   def update(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+      when (is_pid(pid) and is_binary(table) and is_map(payload)) or
+             (is_struct(payload) and is_struct(task)),
       do:
         declare_and_run(
           pid,
