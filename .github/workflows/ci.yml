@@ -38,11 +38,9 @@ jobs:
   integration-tests:
     name: Build and integration test
     runs-on: ubuntu-latest
-    container:
-      image: surrealdb/surrealdb:latest
-      ports:
-        - "8000:8000"
     steps:
+      - name: Installs Surreal DB on VM
+        run: curl -sSf https://install.surrealdb.com | sh
       - name: Starts In-Memory Surreal DB
         run: surreal start --log trace --user root --pass root memory
       - uses: actions/checkout@v3
