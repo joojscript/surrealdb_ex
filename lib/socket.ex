@@ -13,7 +13,7 @@ defmodule SurrealEx.Socket do
         ]
 
   @type base_connection_opts :: socket_opts()
-  @base_connection_opts Application.compile_env(:surreal_ex, :connection_config,
+  @base_connection_opts Application.compile_env(:surrealdb_ex, :connection_config,
                           hostname: "localhost",
                           port: 8000,
                           namespace: "default",

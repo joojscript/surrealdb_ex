@@ -1,9 +1,11 @@
 defmodule SurrealEx.SocketTest do
   use ExUnit.Case, async: true
 
+  require Logger
+
   alias SurrealEx.Socket
 
-  @test_database_config Application.compile_env(:surreal_ex, :test_database_config,
+  @test_database_config Application.compile_env(:surrealdb_ex, :test_database_config,
                           hostname: "localhost",
                           port: 8000,
                           username: "root",
@@ -12,214 +14,227 @@ defmodule SurrealEx.SocketTest do
                           namespace: "default"
                         )
 
+  defp setup_test_database(socket_pid) do
+    Logger.info("Setting up test database")
+
+    sample_scope_creation_query = """
+      DEFINE SCOPE allusers
+      -- the JWT session will be valid for 14 days
+      SESSION 14d
+      -- The optional SIGNUP clause will be run when calling the signup method for this scope
+      -- It is designed to create or add a new record to the database.
+      -- If set, it needs to return a record or a record id
+      -- The variables can be passed in to the signin method
+      SIGNUP ( CREATE user SET user = $user, pass = crypto::argon2::generate($pass) )
+      -- The optional SIGNIN clause will be run when calling the signin method for this scope
+      -- It is designed to check if a record exists in the database.
+      -- If set, it needs to return a record or a record id
+      -- The variables can be passed in to the signin method
+      SIGNIN ( SELECT * FROM user WHERE user = $user AND crypto::argon2::compare(pass, $pass) )
+      -- this optional clause will be run when calling the signup method for this scope
+    """
+
+    # Get from the test args:
+    database = Keyword.get(@test_database_config, :database)
+    namespace = Keyword.get(@test_database_config, :namespace)
+    username = Keyword.get(@test_database_config, :username)
+    password = Keyword.get(@test_database_config, :password)
+
+    # Select namespace and database:
+    assert {:ok, _} = Socket.use(socket_pid, namespace, database)
+
+    # Sign in as root:
+    assert {:ok, _} =
+             Socket.sign_in(socket_pid, %{
+               "user" => username,
+               "pass" => password
+             })
+
+    # Create a sample scope:
+    assert {:ok, _} = Socket.query(socket_pid, sample_scope_creation_query, %{})
+    Logger.info("Test database setup complete")
+  end
+
+  setup_all do
+    # Create a simple connection to the database to make the first configuration
+    {:ok, socket_pid} = Socket.start_link(@test_database_config)
+    setup_test_database(socket_pid)
+
+    {:ok, agent_pid} = Agent.start_link(fn -> @test_database_config end)
+    {:ok, %{agent_pid: agent_pid}}
+  end
+
+  setup context do
+    {:ok, socket_pid} = Socket.start_link(@test_database_config)
+    {:ok, Map.merge(%{socket_pid: socket_pid}, context)}
+  end
+
   @tag integration: true
   test "start_link/1" do
     assert {:ok, _pid} = Socket.start_link(@test_database_config)
   end
 
   @tag integration: true
-  test "stop/1" do
-    assert {:ok, pid} = Socket.start_link(@test_database_config)
-    assert :ok = Socket.stop(pid)
+  test "stop/1", %{socket_pid: socket_pid} do
+    assert :ok = Socket.stop(socket_pid)
   end
 
-  # @tag integration: true
-  # test "sign_in/2" do
-  #   {:ok, pid} = Socket.start_link(@test_database_config)
-
-  #   assert :ok ==
-  #            Socket.sign_in(pid, %{
-  #              "user" => "root",
-  #              "pass" => "root",
-  #              "NS" => "default",
-  #              "DB" => "default"
-  #            })
-  # end
+  @tag integration: true
+  test "sign_in/2", %{socket_pid: socket_pid} do
+    assert {:ok, _} =
+             Socket.sign_in(socket_pid, %{
+               "user" => "root",
+               "pass" => "root"
+             })
+  end
 
   @tag integration: true
-  test "query/3" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "query/3", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
     assert {:ok, %{"result" => [%{"status" => "OK"}]}} =
-             Socket.query(pid, "SELECT * FROM type::table($table)", %{table: "users"})
+             Socket.query(socket_pid, "SELECT * FROM type::table($table)", %{table: "users"})
   end
 
   @tag integration: true
-  test "use/3" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "use/3", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
-  end
-
-  # @tag integration: true
-  # test "authenticate/2" do
-  #   {:ok, pid} = Socket.start_link(@test_database_config)
-
-  #   # Sign up to the database
-  #   assert :ok ==
-  #            Socket.sign_up(
-  #              pid,
-  #              %{
-  #                NS: "default",
-  #                DB: "default",
-  #                SC: "user",
-  #                email: "info@surrealdb.com",
-  #                pass: "123456"
-  #              }
-  #            )
-
-  #   assert :ok ==
-  #            Socket.authenticate(
-  #              pid,
-  #              "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJTdXJyZWFsREIiLCJpYXQiOjE1MTYyMzkwMjIsIm5iZiI6MTUxNjIzOTAyMiwiZXhwIjoxODM2NDM5MDIyLCJOUyI6ImRlZmF1bHQiLCJEQiI6ImRlZmF1bHQiLCJJRCI6InVzZXI6dG9iaWUifQ.5J-KU53JPyw4yrE8ppsAkyovoH9Cpgq4Mgf_kuiWtWs"
-  #            )
-  # end
-
-  # @tag integration: true
-  # test "change/3" do
-  #   # Start Process:
-  #   {:ok, pid} = Socket.start_link(@test_database_config)
-
-  #   # Select namespace:
-  #   assert {:ok, _} = Socket.use(pid, "default", "default")
-
-  #   assert :ok == Socket.change(pid, "users:jhonny", %{"name" => "John"})
-  # end
-
-  # @tag integration: true
-  # test "create/3" do
-  #   # Start Process:
-  #   {:ok, pid} = Socket.start_link(@test_database_config)
-
-  #   # Select namespace:
-  #   assert {:ok, _} = Socket.use(pid, "default", "default")
-
-  #   assert :ok == Socket.create(pid, "users", %{"name" => "John"})
-  # end
-
-  # @tag integration: true
-  # test "delete/3" do
-  #   {:ok, pid} = Socket.start_link(@test_database_config)
-
-  #   assert :ok == Socket.delete(pid, "users:jhonny")
-  # end
-
-  @tag integration: true
-  test "info/1" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
-    # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
-
-    assert {:ok, _} = Socket.info(pid)
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
   end
 
   @tag integration: true
-  test "invalidate/1" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
+  test "authenticate/2", %{socket_pid: socket_pid, agent_pid: agent_pid} do
+    # Sign up to the database
+    assert {:ok, %{"result" => jwt_token}} =
+             Socket.sign_up(
+               socket_pid,
+               %{
+                 DB: "test",
+                 NS: "test",
+                 user: "root",
+                 pass: "root",
+                 SC: "allusers"
+               }
+             )
 
-    # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert Agent.update(
+             agent_pid,
+             fn config ->
+               Keyword.merge(config, jwt_token: jwt_token)
+             end
+           ) == :ok
 
-    assert {:ok, _} = Socket.invalidate(pid)
+    assert {:ok, _} = Socket.authenticate(socket_pid, jwt_token)
   end
 
   @tag integration: true
-  test "kill/2" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "change/3", %{socket_pid: socket_pid, agent_pid: agent_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
-    assert {:ok, _} = Socket.kill(pid, "users:jhonny")
+    # Get authentication token from previous test cases
+    assert jwt = Agent.get(agent_pid, fn config -> config[:jwt_token] end)
+
+    # Authenticate through the database
+    assert {:ok, _} = Socket.authenticate(socket_pid, jwt)
+
+    assert {:ok, _} = Socket.change(socket_pid, "users:jhonny", %{"name" => "John"})
   end
 
   @tag integration: true
-  test "let/3" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "create/3", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
-    assert {:ok, _} = Socket.let(pid, "user_name", "John")
+    assert {:ok, _} = Socket.create(socket_pid, "users", %{"name" => "John"})
   end
 
   @tag integration: true
-  test "live/2" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
-    # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
-
-    assert {:ok, _} = Socket.live(pid, "users")
+  test "delete/3", %{socket_pid: socket_pid} do
+    assert {:ok, _} = Socket.delete(socket_pid, "users:jhonny")
   end
 
   @tag integration: true
-  test "modify/3" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "info/1", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
+
+    assert {:ok, _} = Socket.info(socket_pid)
+  end
+
+  @tag integration: true
+  test "invalidate/1", %{socket_pid: socket_pid} do
+    # Select namespace:
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
+
+    assert {:ok, _} = Socket.invalidate(socket_pid)
+  end
+
+  @tag integration: true
+  test "kill/2", %{socket_pid: socket_pid} do
+    # Select namespace:
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
+
+    assert {:ok, _} = Socket.kill(socket_pid, "users:jhonny")
+  end
+
+  @tag integration: true
+  test "let/3", %{socket_pid: socket_pid} do
+    # Select namespace:
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
+
+    assert {:ok, _} = Socket.let(socket_pid, "user_name", "John")
+  end
+
+  @tag integration: true
+  test "live/2", %{socket_pid: socket_pid} do
+    # Select namespace:
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
+
+    assert {:ok, _} = Socket.live(socket_pid, "users")
+  end
+
+  @tag integration: true
+  test "modify/3", %{socket_pid: socket_pid} do
+    # Select namespace:
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
     assert {:ok, _} =
-             Socket.modify(pid, "users", [
+             Socket.modify(socket_pid, "users", [
                %{op: "replace", path: "/created_at", value: DateTime.utc_now() |> to_string()}
              ])
   end
 
   @tag integration: true
-  test "ping/1" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "ping/1", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
-    assert {:ok, _} = Socket.ping(pid)
+    assert {:ok, _} = Socket.ping(socket_pid)
   end
 
   @tag integration: true
-  test "select/2" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "select/2", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
-    assert {:ok, _} = Socket.select(pid, "users")
+    assert {:ok, _} = Socket.select(socket_pid, "users")
   end
 
   @tag integration: true
-  test "sign_up/2" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "sign_up/2", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
-    assert {:ok, _} = Socket.sign_up(pid, %{user: "root", pass: "root"})
+    assert {:ok, _} = Socket.sign_up(socket_pid, %{user: "root", pass: "root"})
   end
 
   @tag integration: true
-  test "update/3" do
-    # Start Process:
-    {:ok, pid} = Socket.start_link(@test_database_config)
-
+  test "update/3", %{socket_pid: socket_pid} do
     # Select namespace:
-    assert {:ok, _} = Socket.use(pid, "default", "default")
+    assert {:ok, _} = Socket.use(socket_pid, "default", "default")
 
-    assert {:ok, _} = Socket.update(pid, "users:jhonny", %{name: "John"})
+    assert {:ok, _} = Socket.update(socket_pid, "users:jhonny", %{name: "John"})
   end
 end

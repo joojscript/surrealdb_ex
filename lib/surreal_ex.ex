@@ -20,4 +20,24 @@ defmodule SurrealEx do
     We hope you enjoy using the Elixir driver for SurrealDB and welcome your
     feedback and contributions. Happy coding!
   """
+  alias SurrealEx.Operations
+  alias SurrealEx.Socket
+
+  @after_compile __MODULE__
+  @delegate_functions Operations.behaviour_info(:callbacks)
+
+  def __after_compile__(_env, _bytecode) do
+    for {function_name, arity} <- @delegate_functions do
+      formatted_function_name = "&#{function_name}/#{arity}"
+
+      quote do
+        defdelegate unquote(formatted_function_name), to: Socket
+      end
+    end
+  end
+
+  @spec start_link(Socket.socket_opts()) :: {:ok, pid()} | {:error, any()}
+  def start_link(opts) do
+    Socket.start_link(opts)
+  end
 end

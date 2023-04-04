@@ -20,10 +20,13 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-surreal_ex-*.tar
+surrealdb_ex-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
 
 # Local configuration files (optional, mostly overwrite test data):
 config/config.exs
+
+# ElixirLS configuration files
+/.elixir_ls/
