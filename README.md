@@ -45,7 +45,7 @@ The package can be installed by adding `surrealdb_ex` to your list of dependenci
 ```elixir
 def deps do
   [
-    {:surrealdb_ex, "~> 0.1.0"}
+    {:surrealdb_ex, "~> 0.0.1"}
   ]
 end
 ```
