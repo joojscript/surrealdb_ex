@@ -25,8 +25,8 @@ surrealdb_ex-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 
-# Local configuration files (optional, mostly overwrite test data):
-config/config.exs
+# Local configuration files (optional, mostly overwrite dev data):
+config/dev.exs
 
 # ElixirLS configuration files
 /.elixir_ls/

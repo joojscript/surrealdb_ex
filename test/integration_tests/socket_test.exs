@@ -11,56 +11,42 @@ defmodule SurrealEx.SocketTest do
                           username: "root",
                           password: "root",
                           database: "default",
-                          namespace: "default"
+                          namespace: "default",
+                          surreal_cli_path: nil
                         )
 
-  defp setup_test_database(socket_pid) do
+  defp setup_test_database do
     Logger.info("Setting up test database")
 
-    sample_scope_creation_query = """
-      DEFINE SCOPE allusers
-      -- the JWT session will be valid for 14 days
-      SESSION 14d
-      -- The optional SIGNUP clause will be run when calling the signup method for this scope
-      -- It is designed to create or add a new record to the database.
-      -- If set, it needs to return a record or a record id
-      -- The variables can be passed in to the signin method
-      SIGNUP ( CREATE user SET user = $user, pass = crypto::argon2::generate($pass) )
-      -- The optional SIGNIN clause will be run when calling the signin method for this scope
-      -- It is designed to check if a record exists in the database.
-      -- If set, it needs to return a record or a record id
-      -- The variables can be passed in to the signin method
-      SIGNIN ( SELECT * FROM user WHERE user = $user AND crypto::argon2::compare(pass, $pass) )
-      -- this optional clause will be run when calling the signup method for this scope
-    """
+    surreal_cli_path =
+      Keyword.get(@test_database_config, :surreal_cli_path, System.find_executable("surreal"))
 
-    # Get from the test args:
-    database = Keyword.get(@test_database_config, :database)
-    namespace = Keyword.get(@test_database_config, :namespace)
+    if is_nil(surreal_cli_path),
+      do: raise("Could not setup database: not found Surreal DB CLI in PATH")
+
+    hostname = Keyword.get(@test_database_config, :hostname)
+    port = Keyword.get(@test_database_config, :port)
     username = Keyword.get(@test_database_config, :username)
     password = Keyword.get(@test_database_config, :password)
+    database = Keyword.get(@test_database_config, :database)
+    namespace = Keyword.get(@test_database_config, :namespace)
 
-    # Select namespace and database:
-    assert {:ok, _} = Socket.use(socket_pid, namespace, database)
+    {_, exit_code} =
+      System.shell(
+        "#{surreal_cli_path} import --conn http://#{hostname}:#{port} --user #{username} --pass #{password} --ns #{namespace} --db #{database} #{Path.expand("./support/mocked_db.surql", __DIR__)}"
+      )
 
-    # Sign in as root:
-    assert {:ok, result} =
-             Socket.signin(socket_pid, %{
-               "user" => username,
-               "pass" => password
-             })
+    case exit_code do
+      0 ->
+        Logger.info("Test database setup complete")
 
-    IO.inspect(result)
-
-    # Create a sample scope:
-    assert {:ok, _} = Socket.query(socket_pid, sample_scope_creation_query, %{})
-    Logger.info("Test database setup complete")
+      _ ->
+        raise("Could not setup database: Surreal DB CLI exited with code #{exit_code}")
+    end
   end
 
   setup_all do
-    # Create a simple connection to the database to make the first configuration
-    {:ok, socket_pid} = Socket.start_link(@test_database_config)
-    setup_test_database(socket_pid)
+    setup_test_database()
 
     {:ok, agent_pid} = Agent.start_link(fn -> @test_database_config end)
     {:ok, %{agent_pid: agent_pid}}
@@ -142,7 +128,7 @@ defmodule SurrealEx.SocketTest do
 
   @tag integration: true
   # Get authentication token from previous test cases
-  test "change/3", %{socket_pid: socket_pid, agent_pid: agent_pid} do
+  test "change/3", %{socket_pid: socket_pid} do
     assert {:ok, _} = Socket.change(socket_pid, "users:jhonny", %{"name" => "John"})
   end
 

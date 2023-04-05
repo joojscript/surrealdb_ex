@@ -39,10 +39,6 @@ jobs:
     name: Build and integration test
     runs-on: ubuntu-latest
     steps:
-      - name: Installs Surreal DB on VM
-        run: curl -sSf https://install.surrealdb.com | sh
-      - name: Starts In-Memory Surreal DB
-        run: surreal start --log trace --user root --pass root memory &
       - uses: actions/checkout@v3
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
@@ -50,10 +46,12 @@ jobs:
           otp-version: ${{ env.OTP_VERSION_SPEC }}
           elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
           version-type: "strict"
-      - name: Defines Scope for test instance
-        run: elixir test/integration_tests/support/generate_test_scope.exs
       - name: Install dependencies
         run: mix deps.get
+      - name: Installs Surreal DB on VM
+        run: curl -sSf https://install.surrealdb.com | sh
+      - name: Starts In-Memory Surreal DB
+        run: surreal start --log trace --user root --pass root memory &
       - name: Run tests
         run: mix test --only integration:true
 
@@ -73,4 +71,6 @@ jobs:
       - name: Install dependencies
         run: MIX_ENV=dev && mix deps.get
       - name: Publish package to hex.pm
-        run: HEX_API_KEY=${{ secrets.HEX_API_KEY }} mix hex.publish --yes
+        uses: joojscript/action-publish-hex@v0.0.2
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
