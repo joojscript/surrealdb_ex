@@ -56,21 +56,3 @@ jobs:
         run: surreal start --log trace --user root --pass root memory &
       - name: Run tests
         run: mix test --only integration:true
-
-  publish:
-    name: Publish new version of the package
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
-          version-type: "strict"
-      - name: Install dependencies
-        run: touch config/dev.exs && MIX_ENV=dev mix deps.get
-      - name: Publish package to hex.pm
-        run: HEX_API_KEY=${{ secrets.HEX_API_KEY }} mix hex.publish --yes
