@@ -3,12 +3,14 @@ defmodule SurrealEx.MixProject do
 
   def project do
     [
-      app: :surreal_ex,
-      version: "0.1.0",
+      app: :surrealdb_ex,
+      description: "A Surreal DB driver for Elixir language",
+      version: "0.0.1",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      preferred_cli_env: preferred_cli_env()
+      preferred_cli_env: preferred_cli_env(),
+      package: package()
     ]
   end
 
@@ -22,8 +24,16 @@ defmodule SurrealEx.MixProject do
     [
       {:jason, "~> 1.4"},
       {:websockex, "~> 0.4.3"},
-      {:mock, "~> 0.3.0", only: :test},
+      {:ex_doc, "~> 0.27", only: :dev, runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp package() do
+    [
+      name: "surrealdb_ex",
+      licenses: ["MIT"],
+      links: %{"GitHub" => "https://github.com/joojscript/surrealdb_ex"}
     ]
   end
 
