@@ -45,7 +45,7 @@ jobs:
         run: surreal start --log trace --user root --pass root memory &
       - uses: actions/checkout@v3
       - name: Defines Scope for test instance
-        run: cat test/integration_tests/support/define_test_scope.sql | surreal sql --conn http://127.0.0.1:8000 --user root --pass root --ns test --db test
+        run: tr -d "\n\r" < test/integration_tests/support/define_test_scope.sql | surreal sql --conn http://127.0.0.1:8000 --user root --pass root --ns test --db test
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
