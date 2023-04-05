@@ -1,7 +1,5 @@
 defmodule SurrealEx.Socket do
-  alias SurrealEx.Operations
   use WebSockex
-  use SurrealEx.Operations
 
   @type socket_opts :: [
           hostname: String.t(),
@@ -91,15 +89,19 @@ defmodule SurrealEx.Socket do
         ]
   defp task_opts_default, do: [timeout: :infinity]
 
-  @spec declare_and_run(pid(), {String.t(), keyword()}, task_opts()) ::
-          Operations.common_response()
+  @spec declare_and_run(pid(), {String.t(), keyword()}, task_opts()) :: any()
   defp declare_and_run(pid, {method, args}, opts \\ []) do
     task =
       Task.async(fn ->
         receive do
-          {:ok, msg} -> {:ok, msg}
-          {:error, reason} -> {:error, reason}
-          _ -> {:error, "Unknown Error"}
+          {:ok, msg} ->
+            if is_map(msg) and Map.has_key?(msg, "error"), do: {:error, msg}, else: {:ok, msg}
+
+          {:error, reason} ->
+            {:error, reason}
+
+          _ ->
+            {:error, "Unknown Error"}
         end
       end)
 
@@ -113,11 +115,36 @@ defmodule SurrealEx.Socket do
 
   ## Operations Implementation:
 
-  def sign_in(pid, payload) when is_pid(pid) and is_map(payload),
+  @type signup_payload :: %{
+          user: String.t(),
+          pass: String.t()
+        }
+  @doc """
+    Signs in to a specific authentication scope.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.signin(pid, %{user: "root", pass: "root"})
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "6420", "result" => ""}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+        "error" => %{
+          "code" => -32000,
+          "message" => "There was a problem with authentication"
+        },
+        "id" => "7335"
+      }}
+  """
+  @spec signin(pid, signup_payload) :: any
+  def signin(pid, payload) when (is_pid(pid) and is_map(payload)) or is_struct(payload),
     do: declare_and_run(pid, {"signin", [payload: payload]})
 
-  def sign_in(pid, payload, %Task{} = task, opts)
-      when is_pid(pid) and is_struct(task) and is_map(payload),
+  @spec signin(pid, map | struct, Task.t(), task_opts) :: any
+  def signin(pid, payload, %Task{} = task, opts \\ task_opts_default())
+      when (is_pid(pid) and is_struct(task) and is_map(payload)) or is_struct(payload),
       do:
         declare_and_run(
           pid,
@@ -125,10 +152,56 @@ defmodule SurrealEx.Socket do
           opts |> Keyword.merge(task_opts_default())
         )
 
+  @doc """
+    Runs a set of SurrealQL statements against the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.query(pid, "SELECT * FROM type::table($table) WHERE admin = true;", %{table: "users"})
+
+      # SUCCESS CASE:
+      {:ok,
+        %{
+          "id" => "6042",
+          "result" => [
+            %{
+              "result" => [
+                %{
+                  "admin" => true,
+                  "age" => 29,
+                  "id" => "users:5ypb5ifhfo7tnj31pajl",
+                  "name" => "John Doe"
+                },
+                %{
+                  "admin" => true,
+                  "age" => 32,
+                  "id" => "users:zb71vk0kh9d33bucozr7",
+                  "name" => "Mary Jane"
+                }
+              ],
+              "status" => "OK",
+              "time" => "80.164µs"
+            }
+          ]
+        }
+      }
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "There was a problem with the database: Parse error on line 1 at character 0 when parsing [...]"
+          },
+          "id" => "1120"
+        }
+      }
+  """
+  @spec query(pid, Strin.t(), map | struct) :: any
   def query(pid, query, payload)
       when (is_pid(pid) and is_binary(query) and is_map(payload)) or is_struct(payload),
       do: declare_and_run(pid, {"query", [query: query, payload: payload]})
 
+  @spec query(pid, binary, map | struct, Task.t(), task_opts) :: any
   def query(pid, query, payload, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(query) and is_map(payload) and is_struct(task),
       do:
@@ -138,10 +211,32 @@ defmodule SurrealEx.Socket do
           opts
         )
 
+  @doc """
+    Switch to a specific namespace and database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.use(pid, "default", "default")
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "1915", "result" => nil}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "There was a problem with the database: [...]"
+          },
+          "id" => "1120"
+        }
+      }
+  """
+  @spec use(pid, String.t(), String.t()) :: any
   def use(pid, namespace, database)
       when is_pid(pid) and is_binary(namespace) and is_binary(database),
       do: declare_and_run(pid, {"use", [namespace: namespace, database: database]})
 
+  @spec use(pid, binary, binary, Task.t(), task_opts()) :: any
   def use(pid, namespace, database, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(namespace) and is_binary(database) and is_struct(task),
       do:
@@ -151,20 +246,64 @@ defmodule SurrealEx.Socket do
           opts
         )
 
+  @doc """
+    Authenticates the current connection with a JWT token.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.authenticate(pid, "[YOUR JWT TOKEN HERE]")
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "1915", "result" => nil}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "There was a problem with authentication"
+          },
+          "id" => "1492"
+        }
+      }
+  """
+  @spec authenticate(pid, String.t()) :: any
   def authenticate(pid, token) when is_pid(pid) and is_binary(token),
     do: declare_and_run(pid, {"authenticate", [token: token]})
 
+  @spec authenticate(pid, String.t(), Task.t(), task_opts) :: any
   def authenticate(pid, token, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(token) and is_struct(task),
       do: declare_and_run(pid, {"authenticate", [token: token, __receiver__: task]}, opts)
 
+  @doc """
+    Modifies all records in a table, or a specific record, in the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.change(pid, "users:tobie", %{admin: true})
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "303", "result" => [%{"admin" => true, "id" => "users:tobie"}]}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "6432"
+        }
+      }
+  """
+  @spec change(pid, String.t(), map | struct) :: any
   def change(pid, table, payload)
       when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
       do: declare_and_run(pid, {"change", [table: table, payload: payload]})
 
+  @spec change(pid, String.t(), map | struct, Task.t(), task_opts()) :: any
   def change(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when (is_pid(pid) and is_binary(table) and is_map(payload)) or
-             (is_struct(payload) and is_struct(task)),
+      when is_pid(pid) and is_binary(table) and (is_map(payload) or is_struct(payload)) and
+             is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -172,13 +311,43 @@ defmodule SurrealEx.Socket do
           opts
         )
 
+  @doc """
+    Creates a record in the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.create(pid, "users", %{name: "John Doe", age: 30})
+
+      # SUCCESS CASE:
+      {:ok,
+        %{
+          "id" => "9802",
+          "result" => [
+            %{"age" => 30, "id" => "users:agboh28f2vvy18d91q04", "name" => "John Doe"}
+          ]
+        }
+      }
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec create(pid, String.t(), map | struct) :: any
   def create(pid, table, payload)
       when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
       do: declare_and_run(pid, {"create", [table: table, payload: payload]})
 
+  @spec create(pid, String.t(), map | struct, Task.t(), task_opts()) :: any
   def create(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when (is_pid(pid) and is_binary(table) and is_map(payload)) or
-             (is_struct(payload) and is_struct(task)),
+      when is_pid(pid) and is_binary(table) and
+             (is_map(payload) or
+                is_struct(payload)) and is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -186,32 +355,141 @@ defmodule SurrealEx.Socket do
           opts
         )
 
+  @doc """
+    Deletes all records in a table, or a specific record, from the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.delete(pid, "users:jeremy")
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "4054", "result" => []}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec delete(pid, String.t()) :: any
   def delete(pid, table) when is_pid(pid) and is_binary(table),
     do: declare_and_run(pid, {"delete", [table: table]})
 
+  @spec delete(pid, String.t(), Task.t(), task_opts()) :: any
   def delete(pid, table, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(table) and is_struct(task),
       do: declare_and_run(pid, {"delete", [table: table, __receiver__: task]}, opts)
 
+  @doc """
+    Retreive info about the current Surreal instance.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.info(pid)
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "9250", "result" => nil}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec info(pid) :: any
   def info(pid) when is_pid(pid), do: declare_and_run(pid, {"info", []})
 
+  @spec info(pid, Task.t(), task_opts()) :: any
   def info(pid, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"info", [__receiver__: task]}, opts)
 
+  @doc """
+    Invalidates the authentication for the current connection.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.invalidate(pid)
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "9250", "result" => nil}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec invalidate(pid) :: any
   def invalidate(pid) when is_pid(pid), do: declare_and_run(pid, {"invalidate", []})
 
+  @spec invalidate(pid, Task.t(), task_opts()) :: any
   def invalidate(pid, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"invalidate", [__receiver__: task]}, opts)
 
+  @doc """
+    Kill a specific query.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.kill(pid)
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "9250", "result" => nil}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec kill(pid, String.t()) :: any
   def kill(pid, query) when is_pid(pid) and is_binary(query),
     do: declare_and_run(pid, {"kill", [query: query]})
 
+  @spec kill(pid, binary, Task.t(), task_opts()) :: any
   def kill(pid, query, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(query) and is_struct(task),
       do: declare_and_run(pid, {"kill", [query: query, __receiver__: task]}, opts)
 
+  @doc """
+    Switch to a specific namespace and database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.use(pid, "test", "test")
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "9250", "result" => nil}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec let(pid, String.t(), String.t()) :: any
   def let(pid, key, value) when is_pid(pid) and is_binary(key) and is_binary(value),
     do: declare_and_run(pid, {"let", [key: key, value: value]})
 
@@ -219,17 +497,61 @@ defmodule SurrealEx.Socket do
       when is_pid(pid) and is_binary(key) and is_binary(value) and is_struct(task),
       do: declare_and_run(pid, {"let", [key: key, value: value, __receiver__: task]}, opts)
 
+  @doc """
+    Get a live status from a specific table or row.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.live(pid, "users")
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "8913", "result" => "8354534f-5e42-4bb7-8bae-6cf41d38236a"}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec live(pid, String.t()) :: any
   def live(pid, table) when is_pid(pid) and is_binary(table),
     do: declare_and_run(pid, {"live", [table: table]})
 
+  @spec live(pid, binary, Task.t(), task_opts()) :: any
   def live(pid, table, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(table) and is_struct(task),
       do: declare_and_run(pid, {"live", [table: table, __receiver__: task]}, opts)
 
+  @doc """
+    Applies JSON Patch changes to all records, or a specific record, in the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.modify(pid, "users", %{"name" => "John Doe"})
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "8044", "result" => []}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec modify(pid, String.t(), list(map() | struct())) :: any
   def modify(pid, table, payload)
       when is_pid(pid) and is_binary(table) and is_list(payload),
       do: declare_and_run(pid, {"modify", [table: table, payload: payload]})
 
+  @spec modify(pid, String.t(), list(map() | struct()), Task.t(), task_opts()) :: any
   def modify(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(table) and is_list(payload) and is_struct(task),
       do:
@@ -239,30 +561,123 @@ defmodule SurrealEx.Socket do
           opts
         )
 
+  @doc """
+    Ping SurrealDB instance
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.ping(pid)
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "4562", "result" => true}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec ping(pid) :: any
   def ping(pid) when is_pid(pid), do: declare_and_run(pid, {"ping", []})
 
+  @spec ping(pid, Task.t(), task_opts()) :: any
   def ping(pid, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_struct(task),
       do: declare_and_run(pid, {"ping", [__receiver__: task]}, opts)
 
+  @doc """
+    Selects all records in a table, or a specific record, from the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.select(pid, "SELECT * FROM users;")
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "948", "result" => []}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "[...]"
+          },
+          "id" => "2578"
+        }
+      }
+  """
+  @spec select(pid, String.t()) :: any
   def select(pid, query) when is_pid(pid) and is_binary(query),
     do: declare_and_run(pid, {"select", [query: query]})
 
+  @spec select(pid, String.t(), Task.t(), task_opts()) :: any
   def select(pid, query, %Task{} = task, opts \\ task_opts_default())
       when is_pid(pid) and is_binary(query) and is_struct(task),
       do: declare_and_run(pid, {"select", [query: query, __receiver__: task]}, opts)
 
-  def sign_up(pid, payload) when (is_pid(pid) and is_map(payload)) or is_struct(payload),
+  @doc """
+    Signs up to a specific authentication scope.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.signup(pid, %{user: "root", pass: "root", SC: "allusers", DB: "test", NS: "test"})
+
+      # SUCCESS CASE:
+      {:ok,
+        %{
+          "id" => "9267",
+          "result" => "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpYXQiOjE2ODA2NjE5NDksIm5iZiI6MTY4MDY2MTk0OSwiZXhwIjoxNjgxODcxNTQ5LCJpc3MiOiJTdXJyZWFsREIiLCJOUyI6InRlc3QiLCJEQiI6InRlc3QiLCJTQyI6ImFsbHVzZXJzIiwiSUQiOiJ1c2VyOjdqN2hubnloMGFseTV0cHlnb3JrIn0.7IZ7QL6BMgNv9xW_QHu-JrZdfDdX9ngGV5xlxNPHHIkPzgi9OW2iHdUt2wt8x4_5vRo9rijQge04Nvbl3aTV9A"
+        }
+      }
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "There was a problem with authentication"
+          },
+          "id" => "3694"
+        }
+      }
+  """
+  @spec signup(pid, map | struct) :: any
+  def signup(pid, payload) when is_pid(pid) and (is_map(payload) or is_struct(payload)),
     do: declare_and_run(pid, {"signup", [payload: payload]})
 
-  def sign_up(pid, payload, %Task{} = task, opts \\ task_opts_default())
-      when (is_pid(pid) and is_map(payload)) or (is_struct(payload) and is_struct(task)),
+  @spec signup(pid, map | struct, Task.t(), task_opts()) :: any
+  def signup(pid, payload, %Task{} = task, opts \\ task_opts_default())
+      when is_pid(pid) and (is_map(payload) or is_struct(payload)) and is_struct(task),
       do: declare_and_run(pid, {"signup", [payload: payload, __receiver__: task]}, opts)
 
+  @doc """
+    Updates all records in a table, or a specific record, in the database.
+
+      iex> {:ok, pid} = SurrealEx.start_link() # Include your connection options
+      iex> {:ok, result} = SurrealEx.update(pid, "users:jeremy", %{admin: true})
+
+      # SUCCESS CASE:
+      {:ok, %{"id" => "6427", "result" => []}}
+
+      # ERROR CASE:
+      {:error,
+        %{
+          "error" => %{
+            "code" => -32000,
+            "message" => "There was a problem with authentication"
+          },
+          "id" => "3694"
+        }
+      }
+  """
+  @spec update(pid, String.t(), map() | struct()) :: any
   def update(pid, table, payload)
       when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
       do: declare_and_run(pid, {"update", [table: table, payload: payload]})
 
+  @spec update(pid, String.t(), map | struct, Task.t(), task_opts()) :: any
   def update(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
       when (is_pid(pid) and is_binary(table) and is_map(payload)) or
              (is_struct(payload) and is_struct(task)),

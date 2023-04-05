@@ -20,24 +20,78 @@ defmodule SurrealEx do
     We hope you enjoy using the Elixir driver for SurrealDB and welcome your
     feedback and contributions. Happy coding!
   """
-  alias SurrealEx.Operations
   alias SurrealEx.Socket
 
-  @after_compile __MODULE__
-  @delegate_functions Operations.behaviour_info(:callbacks)
+  defdelegate start_link(), to: Socket
+  defdelegate start_link(opts), to: Socket
 
-  def __after_compile__(_env, _bytecode) do
-    for {function_name, arity} <- @delegate_functions do
-      formatted_function_name = "&#{function_name}/#{arity}"
+  defdelegate stop(pid), to: Socket
 
-      quote do
-        defdelegate unquote(formatted_function_name), to: Socket
-      end
-    end
-  end
+  defdelegate signin(pid, payload), to: Socket
+  defdelegate signin(pid, payload, task), to: Socket
+  defdelegate signin(pid, payload, task, opts), to: Socket
 
-  @spec start_link(Socket.socket_opts()) :: {:ok, pid()} | {:error, any()}
-  def start_link(opts) do
-    Socket.start_link(opts)
-  end
+  defdelegate query(pid, query, payload), to: Socket
+  defdelegate query(pid, query, payload, task), to: Socket
+  defdelegate query(pid, query, payload, task, opts), to: Socket
+
+  defdelegate use(pid, namespace, database), to: Socket
+  defdelegate use(pid, namespace, database, task), to: Socket
+  defdelegate use(pid, namespace, database, task, opts), to: Socket
+
+  defdelegate authenticate(pid, token), to: Socket
+  defdelegate authenticate(pid, token, task), to: Socket
+  defdelegate authenticate(pid, token, task, opts), to: Socket
+
+  defdelegate change(pid, table, payload), to: Socket
+  defdelegate change(pid, table, payload, task), to: Socket
+  defdelegate change(pid, table, payload, task, opts), to: Socket
+
+  defdelegate create(pid, table, payload), to: Socket
+  defdelegate create(pid, table, payload, task), to: Socket
+  defdelegate create(pid, table, payload, task, opts), to: Socket
+
+  defdelegate delete(pid, table), to: Socket
+  defdelegate delete(pid, table, task), to: Socket
+  defdelegate delete(pid, table, task, opts), to: Socket
+
+  defdelegate info(pid), to: Socket
+  defdelegate info(pid, task), to: Socket
+  defdelegate info(pid, task, opts), to: Socket
+
+  defdelegate invalidate(pid), to: Socket
+  defdelegate invalidate(pid, task), to: Socket
+  defdelegate invalidate(pid, task, opts), to: Socket
+
+  defdelegate kill(pid, query), to: Socket
+  defdelegate kill(pid, query, task), to: Socket
+  defdelegate kill(pid, query, task, opts), to: Socket
+
+  defdelegate let(pid, key, value), to: Socket
+  defdelegate let(pid, key, value, task), to: Socket
+  defdelegate let(pid, key, value, task, opts), to: Socket
+
+  defdelegate live(pid, table), to: Socket
+  defdelegate live(pid, table, task), to: Socket
+  defdelegate live(pid, table, task, opts), to: Socket
+
+  defdelegate modify(pid, table, payload), to: Socket
+  defdelegate modify(pid, table, payload, task), to: Socket
+  defdelegate modify(pid, table, payload, task, opts), to: Socket
+
+  defdelegate ping(pid), to: Socket
+  defdelegate ping(pid, task), to: Socket
+  defdelegate ping(pid, task, opts), to: Socket
+
+  defdelegate select(pid, query), to: Socket
+  defdelegate select(pid, query, task), to: Socket
+  defdelegate select(pid, query, task, opts), to: Socket
+
+  defdelegate signup(pid, payload), to: Socket
+  defdelegate signup(pid, payload, task), to: Socket
+  defdelegate signup(pid, payload, task, opts), to: Socket
+
+  defdelegate update(pid, table, payload), to: Socket
+  defdelegate update(pid, table, payload, task), to: Socket
+  defdelegate update(pid, table, payload, task, opts), to: Socket
 end

@@ -64,6 +64,23 @@ And so much more! Basically every single function available on the official libr
 
 *If there are any other implementations with different and/or better approaches, feel free to open a request for it to be added.
 
+## Additional Features to take note
+
+All the functions available are following the format of the NodeJs client library, including the function signatures.
+
+All functions are synchronous, if you want to run asynchronously, every functions have alternate signatures using **Tasks**, so you can control how the result will be handled when it comes. But **beware** not to fall in *deadlocks*.
+
+- Quick Example:
+
+```elixir
+  # Synchronously invoked.
+  def update(pid, table, payload)
+
+  # Accepts a %Task{} struct, which will handle the result, also some opts 
+  # regarding the execution of this task. See more on the docs.
+  def update(pid, table, payload, task, opts)
+```
+
 ## Running tests
 
 You can run the full suite of tests by running the following command:
