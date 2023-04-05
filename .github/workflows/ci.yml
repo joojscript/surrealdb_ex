@@ -71,8 +71,6 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
           version-type: "strict"
       - name: Install dependencies
-        run: MIX_ENV=dev && mix deps.get
+        run: touch config/dev.exs && MIX_ENV=dev mix deps.get
       - name: Publish package to hex.pm
-        uses: joojscript/action-publish-hex@v0.0.2
-        env:
-          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        run: HEX_API_KEY=${{ secrets.HEX_API_KEY }} mix hex.publish --yes
