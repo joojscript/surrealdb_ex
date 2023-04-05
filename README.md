@@ -1,4 +1,22 @@
-# SurrealEx
+
+<h1 align="center">
+  <img src="https://seeklogo.com/images/E/elixir-logo-CF24E6FA55-seeklogo.com.png" alt="Surreal DB Elixir" height="160" />
+  <img src="https://avatars.githubusercontent.com/u/10982346?s=200&v=4" alt="Surreal DB Elixir" height="200" />
+  <br />
+  SurrealDB EX
+  
+  <!---->  
+  
+  <br />
+
+  <div align="center">
+    <img alt="made_with" src="https://img.shields.io/badge/MADE%20WITH-ELIXIR-8700ff?style=for-the-badge&logo=elixir" />
+    <img alt="build_status" src="https://img.shields.io/github/actions/workflow/status/joojscript/surrealdb_ex/ci.yml?style=for-the-badge&color=8700ff" />
+    <img alt="hex_downloads" src="https://img.shields.io/hexpm/dt/surrealdb_ex?style=for-the-badge&color=8700ff" />
+    <img alt="open_issues" src="https://img.shields.io/github/issues-raw/joojscript/surrealdb_ex?style=for-the-badge&color=8700ff" />
+    <img alt="version" src="https://img.shields.io/hexpm/v/surrealdb_ex?color=8700ff&style=for-the-badge" />
+  </div>
+</h1>
 
 Welcome to the Elixir driver for SurrealDB! This library allows you to
 connect to SurrealDB, a highly-scalable, distributed NoSQL database designed
