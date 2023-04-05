@@ -50,6 +50,8 @@ jobs:
         run: mix deps.get
       - name: Installs Surreal DB on VM
         run: curl -sSf https://install.surrealdb.com | sh
+      - name: Adds Surreal DB to PATH environment variable
+        run: echo "/usr/local/bin/surreal" >> $GITHUB_PATH
       - name: Starts In-Memory Surreal DB
         run: surreal start --log trace --user root --pass root memory &
       - name: Run tests
