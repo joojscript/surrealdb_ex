@@ -44,11 +44,13 @@ defmodule SurrealEx.SocketTest do
     assert {:ok, _} = Socket.use(socket_pid, namespace, database)
 
     # Sign in as root:
-    assert {:ok, _} =
+    assert {:ok, result} =
              Socket.signin(socket_pid, %{
                "user" => username,
                "pass" => password
              })
+
+    IO.inspect(result)
 
     # Create a sample scope:
     assert {:ok, _} = Socket.query(socket_pid, sample_scope_creation_query, %{})

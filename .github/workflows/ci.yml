@@ -43,6 +43,8 @@ jobs:
         run: curl -sSf https://install.surrealdb.com | sh
       - name: Starts In-Memory Surreal DB
         run: surreal start --log trace --user root --pass root memory &
+      - name: Defines Scope for test instance
+        run: cat test/integration_tests/support/define_test_scope.sql | surreal sql --conn http://127.0.0.1:8000 --user root --pass root --ns test --db test
       - uses: actions/checkout@v3
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
