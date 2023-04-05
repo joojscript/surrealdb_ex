@@ -44,14 +44,14 @@ jobs:
       - name: Starts In-Memory Surreal DB
         run: surreal start --log trace --user root --pass root memory &
       - uses: actions/checkout@v3
-      - name: Defines Scope for test instance
-        run: elixir test/integration_tests/support/generate_test_scope.exs
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ env.OTP_VERSION_SPEC }}
           elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
           version-type: "strict"
+      - name: Defines Scope for test instance
+        run: elixir test/integration_tests/support/generate_test_scope.exs
       - name: Install dependencies
         run: mix deps.get
       - name: Run tests
