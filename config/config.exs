@@ -1,7 +1,7 @@
 import Config
 
-environment_file_path = "#{Mix.env() |> Atom.to_string()}.exs"
+environment_file_path = "#{config_env() |> Atom.to_string()}.exs"
 
-if File.exists?(environment_file_path) do
+if File.exists?(Path.expand(__DIR__, environment_file_path)) do
   import_config(environment_file_path)
 end
