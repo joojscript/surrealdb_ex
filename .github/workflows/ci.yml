@@ -71,6 +71,6 @@ jobs:
           elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
           version-type: "strict"
       - name: Install dependencies
-        run: mix deps.get
+        run: MIX_ENV=dev && mix deps.get
       - name: Publish package to hex.pm
         run: HEX_API_KEY=${{ secrets.HEX_API_KEY }} mix hex.publish --yes
