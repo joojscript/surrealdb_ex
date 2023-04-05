@@ -11,4 +11,3 @@ SIGNUP ( CREATE user SET user = $user, pass = crypto::argon2::generate($pass) )
 -- If set, it needs to return a record or a record id
 -- The variables can be passed in to the signin method
 SIGNIN ( SELECT * FROM user WHERE user = $user AND crypto::argon2::compare(pass, $pass) )
--- this optional clause will be run when calling the signup method for this scope
