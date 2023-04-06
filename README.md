@@ -133,4 +133,5 @@ config :surrealdb_ex,
 
 ## Documentation
 
-Documentation can be found at <https://hexdocs.pm/surrealdb_ex>.
+Documentation can be found on [HexDocs](https://hexdocs.pm/surrealdb_ex).
+Also, the package definition on Hex.pm, can be found [here](https://hex.pm/packages/surrealdb_ex)
