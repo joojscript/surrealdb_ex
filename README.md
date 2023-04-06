@@ -4,10 +4,16 @@
   <img src="https://avatars.githubusercontent.com/u/10982346?s=200&v=4" alt="Surreal DB Elixir" height="200" />
   <br />
   SurrealDB EX
-  
+</h1>
   <!---->  
   
   <br />
+ <p align="center">
+  <a href="#Installation">Installation</a> •
+  <a href="#Configuration">Configuration</a> •
+  <a href="#Usage">Usage</a> •
+  <a href="#Documentation">Documentation</a>
+</p>
 
   <div align="center">
     <img alt="made_with" src="https://img.shields.io/badge/MADE%20WITH-ELIXIR-8700ff?style=for-the-badge&logo=elixir" />
@@ -16,7 +22,8 @@
     <img alt="open_issues" src="https://img.shields.io/github/issues-raw/joojscript/surrealdb_ex?style=for-the-badge&color=8700ff" />
     <img alt="version" src="https://img.shields.io/hexpm/v/surrealdb_ex?color=8700ff&style=for-the-badge" />
   </div>
-</h1>
+  
+  <br/>
 
 Welcome to the Elixir driver for SurrealDB! This library allows you to
 connect to SurrealDB, a highly-scalable, distributed NoSQL database designed
@@ -126,4 +133,5 @@ config :surrealdb_ex,
 
 ## Documentation
 
-Documentation can be found at <https://hexdocs.pm/surrealdb_ex>.
+Documentation can be found on [HexDocs](https://hexdocs.pm/surrealdb_ex).
+Also, the package definition on Hex.pm, can be found [here](https://hex.pm/packages/surrealdb_ex)
