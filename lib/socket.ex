@@ -105,8 +105,6 @@ defmodule SurrealEx.Socket do
         end
       end)
 
-    Process.monitor(task.pid)
-
     WebSockex.cast(pid, {method, Keyword.merge([__receiver__: task], args)})
 
     task_timeout = Keyword.get(opts, :timeout, :infinity)
@@ -196,7 +194,7 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec query(pid, Strin.t(), map | struct) :: any
+  @spec query(pid, String.t(), map | struct) :: any
   def query(pid, query, payload)
       when (is_pid(pid) and is_binary(query) and is_map(payload)) or is_struct(payload),
       do: declare_and_run(pid, {"query", [query: query, payload: payload]})
