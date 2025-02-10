@@ -1,6 +1,6 @@
 
 <h1 align="center">
-  <img src="https://seeklogo.com/images/E/elixir-logo-CF24E6FA55-seeklogo.com.png" alt="Surreal DB Elixir" height="160" />
+  <img src="https://logodix.com/logo/2157075.png" alt="Surreal DB Elixir" height="120" />
   <img src="https://avatars.githubusercontent.com/u/10982346?s=200&v=4" alt="Surreal DB Elixir" height="200" />
   <br />
   SurrealDB EX
