@@ -5,8 +5,8 @@ defmodule SurrealEx.MixProject do
     [
       app: :surrealdb_ex,
       description: "A Surreal DB driver for Elixir language",
-      version: "0.0.1",
-      elixir: "~> 1.14",
+      version: "0.0.2",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       preferred_cli_env: preferred_cli_env(),
@@ -25,7 +25,7 @@ defmodule SurrealEx.MixProject do
       {:jason, "~> 1.4"},
       {:websockex, "~> 0.4.3"},
       {:exconstructor, "~> 1.2.11"},
-      {:ex_doc, "~> 0.27", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
