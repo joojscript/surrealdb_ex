@@ -1,16 +1,9 @@
 defmodule SurrealEx.Socket do
   use WebSockex
+  use SurrealEx.Macros
 
-  @type socket_opts :: [
-          hostname: String.t(),
-          port: integer(),
-          namespace: String.t(),
-          database: String.t(),
-          username: String.t(),
-          password: String.t()
-        ]
+  alias SurrealEx.Domain
 
-  @type base_connection_opts :: socket_opts()
   @base_connection_opts Application.compile_env(:surrealdb_ex, :connection_config,
                           hostname: "localhost",
                           port: 8000,
@@ -20,7 +13,20 @@ defmodule SurrealEx.Socket do
                           password: "root"
                         )
 
-  @spec start_link(socket_opts()) :: WebSockex.on_start()
+  @spec child_spec(Domain.SocketOpts.t()) :: map()
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker
+    }
+  end
+
+  @typep socket_response :: {:ok, Domain.ExecutionSuccess} | {:error, Domain.ExecutionError}
+  @typep process_identifier :: pid | atom
+  @type payload_type :: map() | struct()
+
+  @spec start_link(Domain.SocketOpts.t()) :: GenServer.on_start()
   def start_link(opts \\ []) do
     opts =
       Keyword.merge(
@@ -31,7 +37,15 @@ defmodule SurrealEx.Socket do
     hostname = Keyword.get(opts, :hostname)
     port = Keyword.get(opts, :port)
 
-    WebSockex.start_link("ws://#{hostname}:#{port}/rpc", __MODULE__, opts)
+    case WebSockex.start_link("ws://#{hostname}:#{port}/rpc", __MODULE__, opts) do
+      {:error, reason} ->
+        {:error, reason}
+
+      {:ok, pid} ->
+        opts = Keyword.merge(opts, socket_pid: pid)
+        apply_hooks(pid, opts)
+        {:ok, pid}
+    end
   end
 
   @spec stop(pid()) :: :ok
@@ -40,16 +54,29 @@ defmodule SurrealEx.Socket do
     :ok
   end
 
+  @spec handle_frame({String, String}, map) :: {:ok, map}
   def handle_frame({_type, msg}, state) do
     task = Keyword.get(state, :__receiver__)
+    decoded_payload = Jason.decode!(msg)
 
     Process.send(
       task.pid,
-      {:ok, msg |> Jason.decode!()},
+      {:ok, decoded_payload},
       []
     )
 
     {:ok, state}
+  end
+
+  @spec handle_cast(String, map) :: {:reply, {:text, map}, map}
+  def handle_cast(caller, _state) do
+    {method, args} = caller
+
+    payload = build_cast_payload(method, args)
+
+    frame = {:text, payload}
+    state = args |> Keyword.merge(method: method)
+    {:reply, frame, state}
   end
 
   @spec build_cast_payload(String.t(), keyword(any())) :: String.t()
@@ -84,28 +111,30 @@ defmodule SurrealEx.Socket do
     |> Jason.encode!()
   end
 
-  @type task_opts :: [
-          timeout: integer() | :infinity
-        ]
-  defp task_opts_default, do: [timeout: :infinity]
-
-  @spec declare_and_run(pid(), {String.t(), keyword()}, task_opts()) :: any()
+  @spec declare_and_run(process_identifier, {String, keyword}, Domain.TaskOpts) ::
+          socket_response()
   defp declare_and_run(pid, {method, args}, opts \\ []) do
+    pid = if is_atom(pid), do: Process.whereis(pid), else: pid
+
     task =
       Task.async(fn ->
         receive do
           {:ok, msg} ->
-            if is_map(msg) and Map.has_key?(msg, "error"), do: {:error, msg}, else: {:ok, msg}
+            if is_map(msg) and Map.has_key?(msg, "error"),
+              do: {:error, Domain.ExecutionError.SurrealError.new(msg["error"])},
+              else: {:ok, Domain.ExecutionSuccess.new(msg)}
 
           {:error, reason} ->
-            {:error, reason}
+            {:error, Domain.ExecutionError.SurrealError.new(reason)}
 
           _ ->
-            {:error, "Unknown Error"}
+            error = %{code: -1, message: "Unknown Error"}
+            {:error, Domain.ExecutionError.SurrealError.new(error)}
         end
       end)
 
-    WebSockex.cast(pid, {method, Keyword.merge([__receiver__: task], args)})
+    cast_args = args |> Keyword.merge(__receiver__: task)
+    WebSockex.cast(pid, {method, cast_args})
 
     task_timeout = Keyword.get(opts, :timeout, :infinity)
     Task.await(task, task_timeout)
@@ -113,10 +142,6 @@ defmodule SurrealEx.Socket do
 
   ## Operations Implementation:
 
-  @type signup_payload :: %{
-          user: String.t(),
-          pass: String.t()
-        }
   @doc """
     Signs in to a specific authentication scope.
 
@@ -136,18 +161,20 @@ defmodule SurrealEx.Socket do
         "id" => "7335"
       }}
   """
-  @spec signin(pid, signup_payload) :: any
-  def signin(pid, payload) when (is_pid(pid) and is_map(payload)) or is_struct(payload),
-    do: declare_and_run(pid, {"signin", [payload: payload]})
+  @spec signin(process_identifier, Domain.SignInPayload, Task, Domain.TaskOpts) ::
+          socket_response()
+  def signin(pid, payload)
+      when is_process_identifier(pid) and is_payload_type(payload),
+      do: declare_and_run(pid, {"signin", [payload: payload]})
 
-  @spec signin(pid, map | struct, Task.t(), task_opts) :: any
-  def signin(pid, payload, %Task{} = task, opts \\ task_opts_default())
-      when (is_pid(pid) and is_struct(task) and is_map(payload)) or is_struct(payload),
+  @spec signin(process_identifier, payload_type, Task, Domain.TaskOpts) :: socket_response()
+  def signin(pid, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_payload_type(payload),
       do:
         declare_and_run(
           pid,
           {"signin", [payload: payload, __receiver__: task]},
-          opts |> Keyword.merge(task_opts_default())
+          opts |> Keyword.merge(Domain.TaskOpts.default())
         )
 
   @doc """
@@ -194,14 +221,15 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec query(pid, String.t(), map | struct) :: any
+  @spec query(process_identifier, String, payload_type) :: socket_response
   def query(pid, query, payload)
-      when (is_pid(pid) and is_binary(query) and is_map(payload)) or is_struct(payload),
+      when is_process_identifier(pid) and is_payload_type(payload),
       do: declare_and_run(pid, {"query", [query: query, payload: payload]})
 
-  @spec query(pid, binary, map | struct, Task.t(), task_opts) :: any
-  def query(pid, query, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(query) and is_map(payload) and is_struct(task),
+  @spec query(process_identifier, binary, payload_type, Task, Domain.TaskOpts) :: socket_response
+  def query(pid, query, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_payload_type(payload) and
+             is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -229,14 +257,15 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec use(pid, String.t(), String.t()) :: any
+  @spec use(process_identifier, String, String) :: socket_response
   def use(pid, namespace, database)
-      when is_pid(pid) and is_binary(namespace) and is_binary(database),
+      when is_process_identifier(pid) and is_binary(namespace) and is_binary(database),
       do: declare_and_run(pid, {"use", [namespace: namespace, database: database]})
 
-  @spec use(pid, binary, binary, Task.t(), task_opts()) :: any
-  def use(pid, namespace, database, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(namespace) and is_binary(database) and is_struct(task),
+  @spec use(process_identifier, binary, binary, Task, Domain.TaskOpts) :: socket_response
+  def use(pid, namespace, database, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(namespace) and is_binary(database) and
+             is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -264,13 +293,13 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec authenticate(pid, String.t()) :: any
-  def authenticate(pid, token) when is_pid(pid) and is_binary(token),
+  @spec authenticate(process_identifier, String) :: socket_response
+  def authenticate(pid, token) when is_process_identifier(pid) and is_binary(token),
     do: declare_and_run(pid, {"authenticate", [token: token]})
 
-  @spec authenticate(pid, String.t(), Task.t(), task_opts) :: any
-  def authenticate(pid, token, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(token) and is_struct(task),
+  @spec authenticate(process_identifier, String, Task, Domain.TaskOpts) :: socket_response
+  def authenticate(pid, token, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(token) and is_struct(task),
       do: declare_and_run(pid, {"authenticate", [token: token, __receiver__: task]}, opts)
 
   @doc """
@@ -293,14 +322,17 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec change(pid, String.t(), map | struct) :: any
+  @spec change(process_identifier, String, payload_type) :: socket_response
   def change(pid, table, payload)
-      when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
+      when is_process_identifier(pid) and is_binary(table) and
+             (is_map(payload) or
+                is_struct(payload)),
       do: declare_and_run(pid, {"change", [table: table, payload: payload]})
 
-  @spec change(pid, String.t(), map | struct, Task.t(), task_opts()) :: any
-  def change(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(table) and (is_map(payload) or is_struct(payload)) and
+  @spec change(process_identifier, String, payload_type, Task, Domain.TaskOpts) :: socket_response
+  def change(pid, table, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(table) and
+             is_payload_type(payload) and
              is_struct(task),
       do:
         declare_and_run(
@@ -336,14 +368,14 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec create(pid, String.t(), map | struct) :: any
+  @spec create(process_identifier, String, payload_type) :: socket_response
   def create(pid, table, payload)
-      when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
+      when is_binary(table) and is_payload_type(payload),
       do: declare_and_run(pid, {"create", [table: table, payload: payload]})
 
-  @spec create(pid, String.t(), map | struct, Task.t(), task_opts()) :: any
-  def create(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(table) and
+  @spec create(process_identifier, String, payload_type, Task, Domain.TaskOpts) :: socket_response
+  def create(pid, table, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_binary(table) and
              (is_map(payload) or
                 is_struct(payload)) and is_struct(task),
       do:
@@ -373,13 +405,13 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec delete(pid, String.t()) :: any
-  def delete(pid, table) when is_pid(pid) and is_binary(table),
+  @spec delete(process_identifier, String) :: socket_response
+  def delete(pid, table) when is_process_identifier(pid) and is_binary(table),
     do: declare_and_run(pid, {"delete", [table: table]})
 
-  @spec delete(pid, String.t(), Task.t(), task_opts()) :: any
-  def delete(pid, table, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(table) and is_struct(task),
+  @spec delete(process_identifier, String, Task, Domain.TaskOpts) :: socket_response
+  def delete(pid, table, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(table) and is_struct(task),
       do: declare_and_run(pid, {"delete", [table: table, __receiver__: task]}, opts)
 
   @doc """
@@ -402,12 +434,12 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec info(pid) :: any
-  def info(pid) when is_pid(pid), do: declare_and_run(pid, {"info", []})
+  @spec info(process_identifier) :: socket_response
+  def info(pid) when is_process_identifier(pid), do: declare_and_run(pid, {"info", []})
 
-  @spec info(pid, Task.t(), task_opts()) :: any
-  def info(pid, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+  @spec info(process_identifier, Task, Domain.TaskOpts) :: socket_response
+  def info(pid, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_struct(task),
       do: declare_and_run(pid, {"info", [__receiver__: task]}, opts)
 
   @doc """
@@ -430,12 +462,13 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec invalidate(pid) :: any
-  def invalidate(pid) when is_pid(pid), do: declare_and_run(pid, {"invalidate", []})
+  @spec invalidate(process_identifier) :: socket_response
+  def invalidate(pid) when is_process_identifier(pid),
+    do: declare_and_run(pid, {"invalidate", []})
 
-  @spec invalidate(pid, Task.t(), task_opts()) :: any
-  def invalidate(pid, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+  @spec invalidate(process_identifier, Task, Domain.TaskOpts) :: socket_response
+  def invalidate(pid, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_struct(task),
       do: declare_and_run(pid, {"invalidate", [__receiver__: task]}, opts)
 
   @doc """
@@ -458,13 +491,13 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec kill(pid, String.t()) :: any
-  def kill(pid, query) when is_pid(pid) and is_binary(query),
+  @spec kill(process_identifier, String) :: socket_response
+  def kill(pid, query) when is_process_identifier(pid) and is_binary(query),
     do: declare_and_run(pid, {"kill", [query: query]})
 
-  @spec kill(pid, binary, Task.t(), task_opts()) :: any
-  def kill(pid, query, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(query) and is_struct(task),
+  @spec kill(process_identifier, binary, Task, Domain.TaskOpts) :: socket_response
+  def kill(pid, query, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(query) and is_struct(task),
       do: declare_and_run(pid, {"kill", [query: query, __receiver__: task]}, opts)
 
   @doc """
@@ -487,12 +520,14 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec let(pid, String.t(), String.t()) :: any
-  def let(pid, key, value) when is_pid(pid) and is_binary(key) and is_binary(value),
-    do: declare_and_run(pid, {"let", [key: key, value: value]})
+  @spec let(process_identifier, String, String) :: socket_response
+  def let(pid, key, value)
+      when is_process_identifier(pid) and is_binary(key) and is_binary(value),
+      do: declare_and_run(pid, {"let", [key: key, value: value]})
 
-  def let(pid, key, value, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(key) and is_binary(value) and is_struct(task),
+  @spec let(process_identifier, binary, binary, Task, Domain.TaskOpts) :: socket_response
+  def let(pid, key, value, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(key) and is_binary(value) and is_struct(task),
       do: declare_and_run(pid, {"let", [key: key, value: value, __receiver__: task]}, opts)
 
   @doc """
@@ -515,13 +550,13 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec live(pid, String.t()) :: any
-  def live(pid, table) when is_pid(pid) and is_binary(table),
+  @spec live(process_identifier, String) :: socket_response
+  def live(pid, table) when is_process_identifier(pid) and is_binary(table),
     do: declare_and_run(pid, {"live", [table: table]})
 
-  @spec live(pid, binary, Task.t(), task_opts()) :: any
-  def live(pid, table, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(table) and is_struct(task),
+  @spec live(process_identifier, binary, Task, Domain.TaskOpts) :: socket_response
+  def live(pid, table, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(table) and is_struct(task),
       do: declare_and_run(pid, {"live", [table: table, __receiver__: task]}, opts)
 
   @doc """
@@ -544,14 +579,16 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec modify(pid, String.t(), list(map() | struct())) :: any
+  @spec modify(process_identifier, String, list(payload_type)) :: socket_response
   def modify(pid, table, payload)
-      when is_pid(pid) and is_binary(table) and is_list(payload),
+      when is_process_identifier(pid) and is_binary(table) and is_list(payload),
       do: declare_and_run(pid, {"modify", [table: table, payload: payload]})
 
-  @spec modify(pid, String.t(), list(map() | struct()), Task.t(), task_opts()) :: any
-  def modify(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(table) and is_list(payload) and is_struct(task),
+  @spec modify(process_identifier, String, list(payload_type), Task, Domain.TaskOpts) ::
+          socket_response
+  def modify(pid, table, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(table) and is_list(payload) and
+             is_struct(task),
       do:
         declare_and_run(
           pid,
@@ -579,12 +616,12 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec ping(pid) :: any
-  def ping(pid) when is_pid(pid), do: declare_and_run(pid, {"ping", []})
+  @spec ping(process_identifier) :: socket_response
+  def ping(pid) when is_process_identifier(pid), do: declare_and_run(pid, {"ping", []})
 
-  @spec ping(pid, Task.t(), task_opts()) :: any
-  def ping(pid, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_struct(task),
+  @spec ping(process_identifier, Task, Domain.TaskOpts) :: socket_response
+  def ping(pid, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_struct(task),
       do: declare_and_run(pid, {"ping", [__receiver__: task]}, opts)
 
   @doc """
@@ -607,13 +644,13 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec select(pid, String.t()) :: any
-  def select(pid, query) when is_pid(pid) and is_binary(query),
+  @spec select(process_identifier, String) :: socket_response
+  def select(pid, query) when is_binary(query),
     do: declare_and_run(pid, {"select", [query: query]})
 
-  @spec select(pid, String.t(), Task.t(), task_opts()) :: any
-  def select(pid, query, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and is_binary(query) and is_struct(task),
+  @spec select(process_identifier, String, Task, Domain.TaskOpts) :: socket_response
+  def select(pid, query, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(query) and is_struct(task),
       do: declare_and_run(pid, {"select", [query: query, __receiver__: task]}, opts)
 
   @doc """
@@ -641,13 +678,15 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec signup(pid, map | struct) :: any
-  def signup(pid, payload) when is_pid(pid) and (is_map(payload) or is_struct(payload)),
-    do: declare_and_run(pid, {"signup", [payload: payload]})
+  @spec signup(process_identifier, payload_type) :: socket_response
+  def signup(pid, payload)
+      when is_process_identifier(pid) and is_payload_type(payload),
+      do: declare_and_run(pid, {"signup", [payload: payload]})
 
-  @spec signup(pid, map | struct, Task.t(), task_opts()) :: any
-  def signup(pid, payload, %Task{} = task, opts \\ task_opts_default())
-      when is_pid(pid) and (is_map(payload) or is_struct(payload)) and is_struct(task),
+  @spec signup(process_identifier, payload_type, Task, Domain.TaskOpts) :: socket_response
+  def signup(pid, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_payload_type(payload) and
+             is_struct(task),
       do: declare_and_run(pid, {"signup", [payload: payload, __receiver__: task]}, opts)
 
   @doc """
@@ -670,15 +709,15 @@ defmodule SurrealEx.Socket do
         }
       }
   """
-  @spec update(pid, String.t(), map() | struct()) :: any
+  @spec update(process_identifier, String, payload_type) :: socket_response
   def update(pid, table, payload)
-      when (is_pid(pid) and is_binary(table) and is_map(payload)) or is_struct(payload),
+      when is_process_identifier(pid) and is_binary(table) and is_payload_type(payload),
       do: declare_and_run(pid, {"update", [table: table, payload: payload]})
 
-  @spec update(pid, String.t(), map | struct, Task.t(), task_opts()) :: any
-  def update(pid, table, payload, %Task{} = task, opts \\ task_opts_default())
-      when (is_pid(pid) and is_binary(table) and is_map(payload)) or
-             (is_struct(payload) and is_struct(task)),
+  @spec update(process_identifier, String, payload_type, Task, Domain.TaskOpts) :: socket_response
+  def update(pid, table, payload, %Task{} = task, opts \\ Domain.TaskOpts.default())
+      when is_process_identifier(pid) and is_binary(table) and is_struct(task) and
+             is_payload_type(payload),
       do:
         declare_and_run(
           pid,
@@ -686,12 +725,22 @@ defmodule SurrealEx.Socket do
           opts
         )
 
-  def handle_cast(caller, _state) do
-    {method, args} = caller
+  defp apply_hooks(pid, opts) do
+    name = Keyword.get(opts, :name)
 
-    payload = build_cast_payload(method, args)
+    if not is_nil(name) do
+      Process.register(pid, name)
+    end
 
-    frame = {:text, payload}
-    {:reply, frame, args}
+    [username, password] = [Keyword.get(opts, :username), Keyword.get(opts, :password)]
+    [namespace, database] = [Keyword.get(opts, :namespace), Keyword.get(opts, :database)]
+
+    if not is_nil(username) and not is_nil(password) do
+      {:ok, %{result: token}} =
+        signin(pid, %{user: username, pass: password})
+
+      authenticate(pid, token)
+      __MODULE__.use(pid, namespace, database)
+    end
   end
 end

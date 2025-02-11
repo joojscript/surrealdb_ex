@@ -24,6 +24,7 @@ defmodule SurrealEx.MixProject do
     [
       {:jason, "~> 1.4"},
       {:websockex, "~> 0.4.3"},
+      {:exconstructor, "~> 1.2.11"},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false}
     ]

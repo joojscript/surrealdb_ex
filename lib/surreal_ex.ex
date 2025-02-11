@@ -22,8 +22,14 @@ defmodule SurrealEx do
   """
   alias SurrealEx.Socket
 
+  @type config :: [
+          connection_config: Socket.socket_opts()
+        ]
+
   defdelegate start_link(), to: Socket
   defdelegate start_link(opts), to: Socket
+
+  defdelegate child_spec(opts \\ []), to: Socket
 
   defdelegate stop(pid), to: Socket
 

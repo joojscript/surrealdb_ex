@@ -16,6 +16,7 @@ env:
   MIX_ENV: "test"
   OTP_VERSION_SPEC: "25.2"
   ELIXIR_VERSION_SPEC: "1.14.3"
+  NIXPKGS_ALLOW_UNFREE: "1"
 
 jobs:
   unit-tests:
@@ -24,35 +25,26 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
+      - uses: cachix/install-nix-action@v27
         with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
-          version-type: "strict"
+          nix_path: nixpkgs=channel:nixos-unstable
       - name: Install dependencies
-        run: mix deps.get
+        run: nix-shell --run "mix deps.get"
       - name: Run tests
-        run: mix test --exclude integration:true
+        run: nix-shell --run "mix test --exclude integration:true"
 
   integration-tests:
     name: Build and integration test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Elixir
-        uses: erlef/setup-beam@v1
+      - uses: cachix/install-nix-action@v27
         with:
-          otp-version: ${{ env.OTP_VERSION_SPEC }}
-          elixir-version: ${{ env.ELIXIR_VERSION_SPEC }}
-          version-type: "strict"
+          nix_path: nixpkgs=channel:nixos-unstable
       - name: Install dependencies
-        run: mix deps.get
-      - name: Installs Surreal DB on VM
-        run: curl -sSf https://install.surrealdb.com | sh
-      - name: Adds Surreal DB to PATH environment variable
-        run: echo "/usr/local/bin/surreal" >> $GITHUB_PATH
+        run: nix-shell --run "mix deps.get"
       - name: Starts In-Memory Surreal DB
         run: surreal start --log trace --user root --pass root memory &
       - name: Run tests
-        run: mix test --only integration:true
+        run: nix-shell --run "mix test --only integration:true"
