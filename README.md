@@ -1,7 +1,6 @@
 
 <h1 align="center">
-  <img src="https://logodix.com/logo/2157075.png" alt="Surreal DB Elixir" height="120" />
-  <img src="https://avatars.githubusercontent.com/u/10982346?s=200&v=4" alt="Surreal DB Elixir" height="200" />
+  <img src="./.github/assets/logo.png" alt="Surreal DB Elixir" height="200" />
   <br />
   SurrealDB EX
 </h1>
@@ -52,7 +51,7 @@ The package can be installed by adding `surrealdb_ex` to your list of dependenci
 ```elixir
 def deps do
   [
-    {:surrealdb_ex, "~> 0.0.1"}
+    {:surrealdb_ex, "~> 0.0.2"}
   ]
 end
 ```

@@ -45,6 +45,6 @@ jobs:
       - name: Install dependencies
         run: nix-shell --run "mix deps.get"
       - name: Starts In-Memory Surreal DB
-        run: surreal start --log trace --user root --pass root memory &
+        run: nix-shell --run "surreal start --log trace --user root --pass root memory &"
       - name: Run tests
         run: nix-shell --run "mix test --only integration:true"
